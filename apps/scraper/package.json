@@ -1,0 +1,21 @@
+{
+  "name": "apps-scraper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "notify:test": "tsx src/test-notifier.ts",
+    "scrape": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@job-aggregator/database": "*",
+    "@job-aggregator/notifier": "*",
+    "@job-aggregator/scraper-core": "*",
+    "@job-aggregator/shared": "*",
+    "tsx": "^4.19.2"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@job-aggregator/scraper-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@job-aggregator/database": "*",
+    "@job-aggregator/notifier": "*",
+    "@job-aggregator/parsers": "*",
+    "@job-aggregator/shared": "*",
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0",
+    "playwright": "^1.49.1",
+    "zod": "^3.24.1"
+  }
+}

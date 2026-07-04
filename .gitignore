@@ -1,0 +1,24 @@
+node_modules
+.next
+out
+dist
+coverage
+.env
+.env.local
+.env.production
+.env.docker.local
+.env.*.local
+*.log
+*.tsbuildinfo
+PROJECT_OVERVIEW.md
+playwright-report
+test-results
+packages/database/generated
+
+
+# Docker & Dev Docs (ignore these markdown files)
+DOCKER_AND_GITHUB_COMMANDS.md
+DEPLOY_UBUNTU_DOCKER.md
+DOCKER_LOCAL_TEST.md
+docker-compose.local.yml
+docker-compose.prod.yml

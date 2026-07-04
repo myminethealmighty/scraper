@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum WorkMode {
+  REMOTE
+  HYBRID
+  ONSITE
+  UNKNOWN
+}
+
+enum JobStatus {
+  NEW
+  SAVED
+  APPLIED
+  ARCHIVED
+}
+
+model Job {
+  id             String    @id @default(cuid())
+  title          String    @db.VarChar(512)
+  company        String    @db.VarChar(512)
+  location       String    @db.VarChar(512)
+  salary         String?   @db.VarChar(255)
+  employmentType String?   @db.VarChar(255)
+  workMode       WorkMode  @default(UNKNOWN)
+  postedAt       DateTime?
+  description    String?   @db.Text
+  technologies   Json
+  applyUrl       String    @unique @db.VarChar(512)
+  source         String    @db.VarChar(191)
+  sourceJobId    String?   @db.VarChar(255)
+  fingerprint    String    @unique @db.VarChar(512)
+  status         JobStatus @default(NEW)
+  favorite       Boolean   @default(false)
+  firstSeenAt    DateTime  @default(now())
+  lastSeenAt     DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([source])
+  @@index([company])
+  @@index([status])
+  @@index([favorite])
+  @@index([postedAt])
+}
+
+model ScrapeRun {
+  id          String   @id @default(cuid())
+  source      String?  @db.VarChar(191)
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  status      String   @db.VarChar(64)
+  jobsFound   Int      @default(0)
+  jobsCreated Int      @default(0)
+  jobsUpdated Int      @default(0)
+  error       String?  @db.Text
+}

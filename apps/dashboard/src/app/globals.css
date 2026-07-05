@@ -88,7 +88,7 @@ select {
 
 .filters {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) repeat(6, minmax(118px, 0.65fr)) auto;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(8, minmax(118px, 0.65fr)) auto;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -189,6 +189,12 @@ select {
   gap: 8px 14px;
   color: #344054;
   font-weight: 700;
+}
+
+.posted-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .badge-row {

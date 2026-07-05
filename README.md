@@ -250,15 +250,14 @@ DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 New-job notifications can be sent in three ways:
 
 ```env
-NOTIFIER_TIMING="end"     # send one message after the full scrape run
-NOTIFIER_TIMING="source"  # send after each job source finishes
 NOTIFIER_TIMING="batch"   # send whenever enough new jobs are collected
-NOTIFIER_BATCH_SIZE="10"  # used by batch mode
+NOTIFIER_BATCH_SIZE="10"  # send one notification per 10 new jobs
 NOTIFIER_TIME_ZONE="Asia/Yangon" # Myanmar time, UTC+06:30
 SCRAPER_TIME_ZONE="Asia/Yangon"  # cron schedule timezone, UTC+06:30
+SCRAPER_MAX_JOB_AGE_DAYS="92" # skip jobs posted more than about 3 months ago when posted date is known
 ```
 
-`end` is the default and is the quietest option. `source` is a good balance for long scrapes because each configured source reports separately. `batch` is useful when an empty database creates many jobs and you want updates while the scrape is still running.
+`batch` is the default because long scrapes can create many jobs. It sends each full batch of `NOTIFIER_BATCH_SIZE` new jobs while the scrape continues, then sends any remaining new jobs at the end. Jobs without a posted date are kept because the scraper cannot prove they are older than the configured age window.
 
 ## Add A New Job Site
 

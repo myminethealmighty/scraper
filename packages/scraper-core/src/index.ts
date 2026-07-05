@@ -1,6 +1,5 @@
 export * from "./orchestrator.js";
 export * from "./registry.js";
-export * from "./scrapers/arbeitnow.js";
 export * from "./scrapers/generic-html.js";
 export * from "./scrapers/generic-playwright.js";
 export * from "./scrapers/remotive.js";

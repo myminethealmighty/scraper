@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dashboard
+    init: true
     restart: unless-stopped
     env_file: .env
     environment:
@@ -18,6 +19,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
+    init: true
     restart: unless-stopped
     env_file: .env
     environment:

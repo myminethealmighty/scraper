@@ -55,7 +55,6 @@ export const appConfigSchema = z.object({
   NOTIFIER_BATCH_SIZE: z.coerce.number().int().positive().default(10),
   NOTIFIER_TIME_ZONE: z.string().default("Asia/Yangon"),
   TELEGRAM_BOT_TOKEN: optionalString,
-  TELEGRAM_CHAT_ID: optionalString,
   DISCORD_WEBHOOK_URL: optionalUrl,
   NEXT_PUBLIC_APP_NAME: z.string().default("Job Scraper"),
 });

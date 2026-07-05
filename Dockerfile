@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.npm \
 RUN npx playwright install --with-deps chromium
 
 FROM deps AS build
-ENV DATABASE_URL=mysql://job_user:job_password@mysql:3306/job_aggregator
+ENV DATABASE_URL=mysql://job_user:job_password@mysql:3306/job_scraper
 COPY apps ./apps
 COPY packages ./packages
 RUN npm run build

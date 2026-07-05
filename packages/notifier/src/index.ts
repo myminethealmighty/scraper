@@ -1,4 +1,4 @@
-import { type AppConfig, logger } from "@job-aggregator/shared";
+import { type AppConfig, logger } from "@job-scraper/shared";
 
 export type NotificationJob = {
   title: string;
@@ -23,26 +23,34 @@ export class NoopNotifier implements Notifier {
 export class TelegramNotifier implements Notifier {
   constructor(
     private readonly token: string,
-    private readonly chatId: string,
+    private readonly chatIds: string[],
     private readonly timeZone: string
   ) {}
 
   async notifyNewJobs(jobs: NotificationJob[]): Promise<void> {
     if (jobs.length === 0) return;
 
-    const text = formatJobs(jobs, this.timeZone);
-    const response = await fetch(`https://api.telegram.org/bot${this.token}/sendMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: this.chatId,
-        text,
-        disable_web_page_preview: false
-      })
-    });
+    if (this.chatIds.length === 0) {
+      logger.warn("Telegram notifier has no recipients; skipping message");
+      return;
+    }
 
-    if (!response.ok) {
-      throw new Error(`Telegram notification failed: ${response.status} ${response.statusText}`);
+    const text = formatJobs(jobs, this.timeZone);
+
+    for (const chatId of this.chatIds) {
+      const response = await fetch(`https://api.telegram.org/bot${this.token}/sendMessage`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          disable_web_page_preview: false
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Telegram notification failed for chat ${chatId}: ${response.status} ${response.statusText}`);
+      }
     }
   }
 }
@@ -70,12 +78,13 @@ export class DiscordNotifier implements Notifier {
 
 export function createNotifier(config: AppConfig): Notifier {
   if (config.NOTIFIER_PROVIDER === "telegram") {
-    if (!config.TELEGRAM_BOT_TOKEN || !config.TELEGRAM_CHAT_ID) {
-      logger.warn("Telegram notifier selected without TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID");
+    if (!config.TELEGRAM_BOT_TOKEN) {
+      logger.warn("Telegram notifier selected without TELEGRAM_BOT_TOKEN");
       return new NoopNotifier();
     }
 
-    return new TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, config.NOTIFIER_TIME_ZONE);
+    logger.warn("Telegram bot token is configured, but global chat IDs are disabled. Profile-based Telegram delivery should read recipients from the database.");
+    return new TelegramNotifier(config.TELEGRAM_BOT_TOKEN, [], config.NOTIFIER_TIME_ZONE);
   }
 
   if (config.NOTIFIER_PROVIDER === "discord") {

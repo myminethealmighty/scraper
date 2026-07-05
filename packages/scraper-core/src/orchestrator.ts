@@ -1,5 +1,5 @@
-import { finishScrapeRun, startScrapeRun, upsertJobs } from "@job-aggregator/database";
-import { type NotificationJob, type Notifier } from "@job-aggregator/notifier";
+import { finishScrapeRun, startScrapeRun, upsertJobs } from "@job-scraper/database";
+import { type NotificationJob, type Notifier } from "@job-scraper/notifier";
 import {
   childLogger,
   getConfig,
@@ -7,7 +7,7 @@ import {
   retry,
   sleep,
   type AppConfig,
-} from "@job-aggregator/shared";
+} from "@job-scraper/shared";
 import { createScrapers } from "./registry.js";
 import type { Scraper, ScrapeContext, ScrapeSummary } from "./types.js";
 

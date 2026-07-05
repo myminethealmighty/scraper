@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { updateJob } from "@job-aggregator/database";
-import { updateJobSchema } from "@job-aggregator/shared";
+import { updateJob } from "@job-scraper/database";
+import { updateJobSchema } from "@job-scraper/shared";
 
 export async function updateJobAction(id: string, formData: FormData) {
   const favoriteValue = formData.get("favorite");

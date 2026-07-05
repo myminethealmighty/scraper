@@ -1,5 +1,5 @@
 import axios from "axios";
-import { extractTechnologies, type RawJob } from "@job-aggregator/shared";
+import { extractTechnologies, type RawJob } from "@job-scraper/shared";
 import type { ScrapeContext, Scraper } from "../types.js";
 
 type RemotiveResponse = {

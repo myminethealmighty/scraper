@@ -1,93 +1,105 @@
 # Job Scraper
 
-A production-minded TypeScript monorepo for scraping configured job sources, matching configured search terms, deduplicating results, storing them in MySQL with Prisma, sending optional Telegram/Discord notifications, and exposing a Next.js dashboard plus REST API.
+A production-minded TypeScript monorepo for scraping supported job portals, storing normalized jobs in MySQL, deduplicating results, and viewing them through a Next.js dashboard. The project is designed around source adapters, Prisma repositories, scheduled workers, and future database-driven search profiles.
+
+## What It Does
+
+- Scrapes supported job portals through adapter classes.
+- Uses direct APIs where available, Cheerio for static HTML, and Playwright for dynamic pages.
+- Stores normalized jobs in MySQL through Prisma.
+- Deduplicates jobs by apply URL first, then by company/title/location fingerprint.
+- Tracks scrape runs, created jobs, updated jobs, failures, and source history.
+- Supports dashboard search, filters, details, saved/applied/favorite state, and statistics.
+- Runs manually from the CLI or automatically through a scheduled worker.
+- Supports Discord webhook delivery now, with Telegram bot/profile delivery prepared at the data-model level.
 
 ## Architecture
 
 ```text
 apps/
   dashboard/   Next.js dashboard and REST API
-  scraper/     One-shot CLI scraper
-  worker/      node-cron scheduler
+  scraper/     Manual one-shot scraper command
+  worker/      node-cron scheduled worker
 
 packages/
-  database/     Prisma MySQL schema, migrations, repositories
-  scraper-core/ Scraper interface, orchestration, sample scrapers
+  database/     Prisma schema, migrations, repositories, profile helpers
+  scraper-core/ Scraper interface, source registry, orchestration
   parsers/      Cheerio parsing helpers
-  notifier/     Telegram, Discord, noop notifiers
-  shared/       Zod config, types, logging, normalization utilities
+  notifier/     Notification adapters
+  shared/       Zod config, schemas, logging, shared utilities
 ```
 
-## How It Operates
+## Runtime Flow
 
-1. `apps/worker` or `apps/scraper` starts a scrape run.
-2. `packages/shared` validates environment variables with Zod and creates the Pino logger.
-3. `packages/scraper-core` loads all registered scrapers from `registry.ts`.
-4. Each scraper searches the configured keywords, roles, or domain terms.
-5. API-based sources use Axios/fetch-style requests; static pages use Cheerio; dynamic pages use Playwright.
-6. Each result is validated as a `RawJob`.
-7. `packages/database` normalizes technologies, creates a duplicate fingerprint, and upserts into MySQL.
-8. Deduplication uses either `applyUrl` or `company + title + location`.
-9. Newly created jobs are sent to the configured notifier.
-10. `apps/dashboard` reads jobs, filters, and stats from MySQL through REST routes and server-rendered UI.
+1. The manual scraper or scheduled worker loads configuration from `.env`.
+2. The scraper registry creates source adapters for the enabled supported portals.
+3. Each adapter searches one source/term group and returns `RawJob[]` records.
+4. Zod validates each raw job before persistence.
+5. The database package cleans text, infers work mode where possible, deduplicates, and upserts jobs.
+6. The orchestrator records scrape status in `ScrapeRun` and sends new-job batches to the configured notifier.
+7. The dashboard reads jobs and stats from MySQL through the database package.
 
-## Features
+## Supported Sources
 
-- Scrapes multiple sources with one scraper class per website.
-- Supports source adapters that can use direct APIs, Cheerio for static HTML, or Playwright for dynamic pages.
-- Searches terms from configuration, so the same scraper pipeline can target different roles, industries, skills, or descriptions without changing core code.
-- Extracts title, company, location, salary, employment type, work mode, dates, description, tags/technologies, apply URL, and source.
-- Normalizes common tags and technology names such as `ReactJS` to `React` and `NodeJS` to `Node.js`.
-- Deduplicates by `applyUrl` or company + title + location fingerprint.
-- Schedules daily scraping at noon by default with `node-cron`.
-- Sends notifications for newly created jobs through Telegram or Discord.
-- Includes dashboard search, filters, saved/applied/favorite state, and statistics.
-- Uses Zod validation, Pino structured logging, retries, rate limiting, Docker, and Prisma migrations.
+Supported sources are defined in [packages/scraper-core/src/sources.ts](/Users/minkhant/Desktop/MKT/scraper/packages/scraper-core/src/sources.ts). Users should choose from these supported source keys instead of entering arbitrary URLs.
 
-## Local MySQL Setup
+| Key | Source | Method |
+| --- | --- | --- |
+| `remotive` | Remotive | API |
+| `jobspace_mm` | JobSpace Myanmar | Playwright |
+| `jobnet_mm` | JobNet Myanmar | Cheerio |
+| `alote_mm` | Alote Myanmar | Cheerio |
+| `linkedin` | LinkedIn | Playwright |
+| `jobsdb_th` | JobsDB Thailand | Playwright |
+| `jobsdb_sg` | JobsDB Singapore | Playwright |
+| `remote_ok` | Remote OK | Cheerio/API-style JSON page |
+| `we_work_remotely` | We Work Remotely | Playwright |
 
-This project is configured for your local MySQL server on port `3306`, which you can manage from MySQL Workbench. Prisma connects over TCP, so use `127.0.0.1` in `DATABASE_URL`.
+This keeps scraping safer and more reliable than accepting random URLs. If arbitrary URLs are added later, they should be mapped to known adapters and checked against SSRF protections before any request is made.
 
-1. Open MySQL Workbench and connect to your local server.
-2. Create the database:
+## Configuration
 
-```sql
-CREATE DATABASE job_aggregator CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-3. Copy env values:
+Copy the example env file and edit it for your machine:
 
 ```bash
 cp .env.example .env
 ```
 
-4. Edit `.env` and set the MySQL credentials you use in Workbench:
+Minimum local config:
 
 ```env
-DATABASE_URL="mysql://root:your_password@127.0.0.1:3306/job_aggregator"
+DATABASE_URL="mysql://root:password@127.0.0.1:3306/job_scraper"
+SCRAPER_CRON="0 12 * * *"
+SCRAPER_TIME_ZONE="Asia/Yangon"
+SCRAPER_MAX_JOB_AGE_DAYS="92"
+NOTIFIER_PROVIDER="none"
+NEXT_PUBLIC_APP_NAME="Job Scraper"
 ```
 
-If your MySQL user has no password, use:
+If your local MySQL `root` user has no password, use:
 
 ```env
-DATABASE_URL="mysql://root@127.0.0.1:3306/job_aggregator"
+DATABASE_URL="mysql://root@127.0.0.1:3306/job_scraper"
 ```
 
-## Start Locally
+`TELEGRAM_CHAT_ID` is intentionally not part of the new env file. Telegram recipients should come from bot subscriptions saved in the database, not from one hardcoded global chat ID.
 
-Install dependencies:
+## Local Setup
+
+Create the MySQL database:
+
+```sql
+CREATE DATABASE job_scraper CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+Install dependencies and apply migrations:
 
 ```bash
 npm install
-```
-
-Apply the Prisma migration to your local MySQL database:
-
-```bash
 npm run db:migrate
 ```
 
-Run a one-shot scrape:
+Run one manual scrape:
 
 ```bash
 npm run scrape
@@ -101,7 +113,7 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Run the scheduled worker in another terminal:
+Start the scheduled worker in another terminal:
 
 ```bash
 npm run dev:worker
@@ -109,111 +121,54 @@ npm run dev:worker
 
 ## Docker
 
-Docker Compose uses the MySQL connection from .env. On production, this points to the existing host MySQL server through host.docker.internal.
+The main Docker Compose file is used for local Docker runs and production. It reads `.env` from the project root.
 
 ```bash
-cp .env.example .env
-docker compose up --build
+docker compose up -d --build
+docker compose exec dashboard npm run db:migrate
 ```
 
-Inside Docker, services read .env; keep real credentials out of git. On the Ubuntu server, keep the file at /var/www/scraper/.env.
+Production on the VPS uses the same pattern from `/var/www/scraper`:
 
-For local development with your Workbench database, prefer the non-Docker flow above.
-
-For Ubuntu server production deployment with existing Nginx apps, use the main docker-compose.yml file plus your server .env.
-
-For local Docker testing against your existing local MySQL, use:
-
-```text
-DOCKER_LOCAL_TEST.md
-docker-compose.local.yml
+```bash
+cd /var/www/scraper
+docker compose up -d --build --force-recreate
+docker compose exec dashboard npm run db:migrate
 ```
 
-For Docker command and GitHub CI/CD cheat sheet, use:
-
-```text
-DOCKER_AND_GITHUB_COMMANDS.md
-```
-
-### Production Docker Notes
-
-The production image contains the Node.js runtime, installed npm dependencies, compiled TypeScript packages, the built Next.js dashboard, worker/scraper code, Prisma client, Playwright system dependencies, and the Playwright Chromium browser files. It does not contain MySQL data. Production MySQL runs on the host and is reached through `host.docker.internal:3306`.
-
-Docker build cache is safe to keep. It does not hide old UI or source code: Docker invalidates the source/build layer when files under `apps/` or `packages/` change. The expensive cached layers are dependency install and Playwright browser install.
-
-Small code or UI changes should usually rebuild much faster after the first cache-friendly build. Builds become slow again when `package.json`, `package-lock.json`, `Dockerfile`, the Node base image, or the Playwright version changes, or after clearing Docker build cache.
-
-Useful production commands:
+Useful project-only Docker commands:
 
 ```bash
 cd /var/www/scraper
 
-# Current scraper containers
 docker compose ps
-
-# Rebuild and restart this project
-docker compose up -d --build
-
-# Run migrations
-docker compose exec dashboard npm run db:migrate
-
-# Watch logs
 docker compose logs -f --tail=100 dashboard
 docker compose logs -f --tail=100 worker
-
-# Run one manual scrape in a disposable container
+docker compose restart worker
 docker compose run --rm --no-deps worker npm run scrape
-
-# Show Docker disk usage
 docker system df
 docker builder du
-
-# Remove unused build cache only
 docker builder prune
 ```
 
-Avoid `docker system prune -a` on the VPS unless you have checked other Docker projects first.
+Avoid broad Docker cleanup commands on a shared server unless you have checked other projects first.
 
-### Clear Production Job Data And Test One Scrape
+## Database Tables
 
-This keeps the schema and migrations but deletes collected jobs and scrape history:
+### Job Identity Fields
 
-```sql
-USE job_aggregator;
+- `sourceJobId`: the source website's own job ID or slug when the adapter can find one. It helps trace a row back to the original portal.
+- `fingerprint`: a stable dedupe key built from company, title, and location. It is used when the apply URL is missing or changes.
+- `firstSeenAt`: when this project first inserted the job.
+- `lastSeenAt`: when this project last saw or refreshed the job during a scrape.
 
-SET FOREIGN_KEY_CHECKS=0;
-TRUNCATE TABLE JobTechnology;
-TRUNCATE TABLE Job;
-TRUNCATE TABLE ScrapeRun;
-SET FOREIGN_KEY_CHECKS=1;
-```
+### Prisma Migration Table
 
-Then run one scrape and watch logs:
+`_prisma_migrations` is Prisma's internal migration history table. It records which migration files have already been applied, their checksums, timestamps, and failure/rollback state. Do not edit it manually unless you are deliberately repairing a migration problem.
 
-```bash
-cd /var/www/scraper
-docker compose run --rm --no-deps worker npm run scrape
-docker compose logs -f --tail=150 worker
-curl http://127.0.0.1:3010/api/stats
-```
+### ScrapeRun Table
 
-
-## REST API
-
-- `GET /api/jobs`
-- `GET /api/jobs?q=remote&workMode=REMOTE&technology=TypeScript&status=NEW&favorite=true`
-- `GET /api/jobs/:id`
-- `PATCH /api/jobs/:id`
-- `GET /api/stats`
-
-Patch body:
-
-```json
-{
-  "status": "APPLIED",
-  "favorite": true
-}
-```
+`ScrapeRun` is the scraper audit log. Each run records the source name, status, start time, finish time, jobs found, jobs created, jobs updated, and error text when a scraper fails. It is useful for checking whether a scheduled run actually happened and which adapter failed.
 
 ## Notifications
 
@@ -223,48 +178,77 @@ Disable notifications:
 NOTIFIER_PROVIDER="none"
 ```
 
-Telegram:
-
-```env
-NOTIFIER_PROVIDER="telegram"
-TELEGRAM_BOT_TOKEN="..."
-TELEGRAM_CHAT_ID="..."
-```
-
-Test Telegram delivery:
-
-```bash
-npm run notify:test
-```
-
-Discord:
+Discord webhook delivery:
 
 ```env
 NOTIFIER_PROVIDER="discord"
 DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 ```
 
-
-## Notification Timing
-
-New-job notifications can be sent in three ways:
+Telegram currently uses `TELEGRAM_BOT_TOKEN` for the bot/profile direction. Global `TELEGRAM_CHAT_ID` delivery was removed so recipients can be stored per user later.
 
 ```env
-NOTIFIER_TIMING="batch"   # send whenever enough new jobs are collected
-NOTIFIER_BATCH_SIZE="10"  # send one notification per 10 new jobs
-NOTIFIER_TIME_ZONE="Asia/Yangon" # Myanmar time, UTC+06:30
-SCRAPER_TIME_ZONE="Asia/Yangon"  # cron schedule timezone, UTC+06:30
-SCRAPER_MAX_JOB_AGE_DAYS="92" # skip jobs posted more than about 3 months ago when posted date is known
+NOTIFIER_PROVIDER="telegram"
+TELEGRAM_BOT_TOKEN="..."
 ```
 
-`batch` is the default because long scrapes can create many jobs. It sends each full batch of `NOTIFIER_BATCH_SIZE` new jobs while the scrape continues, then sends any remaining new jobs at the end. Jobs without a posted date are kept because the scraper cannot prove they are older than the configured age window.
+Notification batching:
 
-## Add A New Job Site
+```env
+NOTIFIER_TIMING="batch"
+NOTIFIER_BATCH_SIZE="10"
+NOTIFIER_TIME_ZONE="Asia/Yangon"
+```
 
-Create a scraper in `packages/scraper-core/src/scrapers`:
+`batch` sends one message per full batch while a long scrape continues, then sends any remaining new jobs at the end.
+
+## Multi-User Search Profiles
+
+The next product layer should use database-driven search profiles instead of permanent env-only search terms.
+
+Recommended flow:
+
+```text
+/start
+-> upsert TelegramUser by chat ID
+-> create or load the user's SearchProfile
+-> show supported source buttons
+-> save selected SearchSource rows
+-> ask for roles, skills, keywords, locations, or companies
+-> save SearchTerm rows
+-> group scrape work by source + normalized term
+-> match jobs to profiles
+-> write NotificationLog rows
+-> send profile-specific notifications
+```
+
+New profile-oriented models already exist in the Prisma schema:
+
+```text
+TelegramUser
+SearchProfile
+SearchSource
+SearchTerm
+UserJobMatch
+NotificationLog
+TaxonomyTerm
+TaxonomyAlias
+```
+
+Start new logic in this order:
+
+1. Add the Telegram bot command/webhook handler for `/start`.
+2. Use `packages/database/src/profiles.ts` to save users, selected sources, and search terms.
+3. Use `packages/scraper-core/src/profile-plan.ts` to create grouped scrape tasks.
+4. Add a matcher that links jobs to profiles through `UserJobMatch`.
+5. Send notifications from profile recipients and record them in `NotificationLog`.
+
+## Add A New Supported Source
+
+Create a scraper class in `packages/scraper-core/src/scrapers`:
 
 ```ts
-import type { RawJob } from "@job-aggregator/shared";
+import type { RawJob } from "@job-scraper/shared";
 import type { ScrapeContext, Scraper } from "../types.js";
 
 export class ExampleScraper implements Scraper {
@@ -277,36 +261,13 @@ export class ExampleScraper implements Scraper {
 }
 ```
 
-Then register it in `packages/scraper-core/src/registry.ts`.
-
-## Source Adapters
-
-The scraper layer is adapter-based. Each source implements the same `Scraper` interface, so additional job boards can be added without changing the orchestration, persistence, dashboard, or notification code.
-
-The repository includes several bundled adapters as examples, covering API-based sources, static HTML parsing, and Playwright-driven dynamic pages. Some public job boards may challenge, rate-limit, or block automated traffic; scraper failures are isolated and logged into `ScrapeRun` without stopping other sources.
-
-## Database Notes
-
-The Prisma schema lives at:
-
-```text
-packages/database/prisma/schema.prisma
-```
-
-The initial MySQL migration lives at:
-
-```text
-packages/database/prisma/migrations/000001_init/migration.sql
-```
-
-MySQL does not support Prisma scalar lists, so `Job.technologies` is stored as JSON. The repository layer converts it back to `string[]` before returning jobs to the dashboard/API.
+Then register it through `packages/scraper-core/src/sources.ts` so users can select it by source key.
 
 ## Useful Commands
 
 ```bash
 npm run dev              # dashboard
 npm run dev:worker       # scheduled worker
-npm run notify:test      # send a test notification
 npm run scrape           # one-shot scrape
 npm run build            # build all workspaces
 npm run typecheck        # typecheck all workspaces
@@ -315,4 +276,3 @@ npm run db:migrate       # apply migrations
 npm run db:studio        # open Prisma Studio
 npm audit --omit=dev     # dependency audit
 ```
-

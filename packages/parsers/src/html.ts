@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { compactText, extractTechnologies, type RawJob } from "@job-aggregator/shared";
+import { compactText, extractTechnologies, type RawJob } from "@job-scraper/shared";
 
 export function parseRemoteOkHtml(html: string): RawJob[] {
   const $ = cheerio.load(html);

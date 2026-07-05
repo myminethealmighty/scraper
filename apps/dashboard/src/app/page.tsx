@@ -7,8 +7,8 @@ import {
   Search,
   Star,
 } from "lucide-react";
-import { getJobStats, listJobs } from "@job-aggregator/database";
-import { jobQuerySchema, type JobQuery } from "@job-aggregator/shared";
+import { getJobStats, listJobs } from "@job-scraper/database";
+import { jobQuerySchema, type JobQuery } from "@job-scraper/shared";
 import { updateJobAction } from "./actions";
 
 type PageProps = {
@@ -25,10 +25,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       <header className="topbar">
         <div className="brand">
           <h1>Job Scraper</h1>
-          <p>
-            React, Next.js, Laravel, PHP, TypeScript, Node.js, and Full Stack
-            roles.
-          </p>
         </div>
         <a
           className="button primary"
@@ -156,7 +152,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                       <span>{job.workMode}</span>
                       {job.salary ? <span>{job.salary}</span> : null}
                       {job.postedAt ? (
-                        <span className="posted-date"><CalendarDays size={14} /> {formatDate(job.postedAt)}</span>
+                        <span className="posted-date">
+                          <CalendarDays size={14} /> {formatDate(job.postedAt)}
+                        </span>
                       ) : null}
                       {job.employmentType ? (
                         <span>{job.employmentType}</span>
@@ -374,7 +372,7 @@ function formatDate(value: Date | string) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
-    year: "numeric"
+    year: "numeric",
   }).format(new Date(value));
 }
 

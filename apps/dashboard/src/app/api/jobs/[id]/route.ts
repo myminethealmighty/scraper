@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getJob, updateJob } from "@job-aggregator/database";
-import { updateJobSchema } from "@job-aggregator/shared";
+import { getJob, updateJob } from "@job-scraper/database";
+import { updateJobSchema } from "@job-scraper/shared";
 
 type RouteContext = {
   params: Promise<{ id: string }>;

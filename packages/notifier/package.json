@@ -1,5 +1,5 @@
 {
-  "name": "@job-aggregator/notifier",
+  "name": "@job-scraper/notifier",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,6 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@job-aggregator/shared": "*"
+    "@job-scraper/shared": "*"
   }
 }

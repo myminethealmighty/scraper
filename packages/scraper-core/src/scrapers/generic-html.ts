@@ -44,9 +44,9 @@ export class GenericHtmlJobBoardScraper implements Scraper {
       const applyUrl = new URL(href, this.config.baseUrl).toString();
       if (seen.has(applyUrl)) return;
 
-      const title = compactText(anchor.text());
+      const title = cleanJobTitle(anchor.text());
       const container = anchor.closest("article, .job, .job-item, .serp-item, .card, li, tr, div");
-      const description = compactText(container.text() || anchor.parent().text() || title);
+      const description = cleanJobDescription(container.text() || anchor.parent().text() || title);
       if (!isRelevant(title, description, keyword)) return;
 
       const company = inferField(description, title) || "Unknown";
@@ -92,6 +92,17 @@ export function createAloteScraper(): Scraper {
   });
 }
 
+function cleanJobTitle(value: string): string {
+  return compactText(value.replace(/\b\S*_with_bool_\S*\b/g, " "));
+}
+
+function cleanJobDescription(value: string): string {
+  return compactText(
+    value
+      .replace(/\b\S*_with_bool_\S*\b/g, " ")
+      .replace(/^\(\(env,\s*targets\).*$/s, " ")
+  );
+}
 function isRelevant(title: string, description: string, keyword: string): boolean {
   if (title.length < 3 || title.length > 180) return false;
   const haystack = `${title} ${description}`.toLowerCase();

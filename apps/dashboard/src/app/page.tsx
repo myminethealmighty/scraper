@@ -146,7 +146,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               <article className="job-card" key={job.id}>
                 <div>
                   <h2>
-                    {job.title}{" "}
+                    {cleanDisplayText(job.title)}{" "}
                     <span className="source-badge">{job.source}</span>
                   </h2>
                   <div className="job-lines">
@@ -154,13 +154,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                     <div>{job.location}</div>
                     <div className="detail-row">
                       <span>{job.workMode}</span>
-                      {job.salary ? (
-                        <span>{job.salary}</span>
-                      ) : (
-                        <span>Salary not listed</span>
-                      )}
-                      <span>{job.status}</span>
-                      <span className="posted-date"><CalendarDays size={14} /> {formatDate(job.postedAt)}</span>
+                      {job.salary ? <span>{job.salary}</span> : null}
+                      {job.postedAt ? (
+                        <span className="posted-date"><CalendarDays size={14} /> {formatDate(job.postedAt)}</span>
+                      ) : null}
                       {job.employmentType ? (
                         <span>{job.employmentType}</span>
                       ) : null}
@@ -180,8 +177,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                       </a>
                     ))}
                   </div>
-                  {job.description ? (
-                    <p>{truncate(job.description, 260)}</p>
+                  {cleanDisplayText(job.description) ? (
+                    <p>{truncate(cleanDisplayText(job.description), 260)}</p>
                   ) : null}
                 </div>
                 <div className="actions">
@@ -373,14 +370,20 @@ function buildHref(
   return search ? "/?" + search : "/";
 }
 
-function formatDate(value: Date | string | null) {
-  if (!value) return "Posted date unknown";
-
+function formatDate(value: Date | string) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric"
   }).format(new Date(value));
+}
+
+function cleanDisplayText(value: string | null) {
+  return (value ?? "")
+    .replace(/\b\S*_with_bool_\S*\b/g, " ")
+    .replace(/^\(\(env,\s*targets\).*$/s, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function truncate(value: string, max: number) {

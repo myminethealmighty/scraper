@@ -18,15 +18,22 @@ export const rawJobSchema = z.object({
   sourceJobId: z.string().nullable().optional()
 });
 
+const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
+
+const optionalTextSchema = z.preprocess(emptyToUndefined, z.string().optional());
+const optionalBooleanSchema = z.preprocess(emptyToUndefined, z.coerce.boolean().optional());
+const optionalPageNumberSchema = z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional());
+const optionalPageSizeSchema = z.preprocess(emptyToUndefined, z.coerce.number().int().positive().max(100).optional());
+
 export const jobQuerySchema = z.object({
-  q: z.string().optional(),
-  source: z.string().optional(),
-  workMode: workModeSchema.optional(),
-  technology: z.string().optional(),
-  status: jobStatusSchema.optional(),
-  favorite: z.coerce.boolean().optional(),
-  page: z.coerce.number().int().positive().default(1),
-  pageSize: z.coerce.number().int().positive().max(100).default(25)
+  q: optionalTextSchema,
+  source: optionalTextSchema,
+  workMode: z.preprocess(emptyToUndefined, workModeSchema.optional()),
+  technology: optionalTextSchema,
+  status: z.preprocess(emptyToUndefined, jobStatusSchema.optional()),
+  favorite: optionalBooleanSchema,
+  page: optionalPageNumberSchema.default(1),
+  pageSize: optionalPageSizeSchema.default(25)
 });
 
 export const updateJobSchema = z.object({

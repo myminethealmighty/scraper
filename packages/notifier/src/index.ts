@@ -4,6 +4,8 @@ export type NotificationJob = {
   title: string;
   company: string;
   location: string;
+  salary?: string | null;
+  technologies?: string[];
   applyUrl: string;
   source: string;
 };
@@ -85,10 +87,46 @@ export function createNotifier(config: AppConfig): Notifier {
 }
 
 function formatJobs(jobs: NotificationJob[]): string {
-  const lines = jobs.slice(0, 10).map((job) =>
-    [`${job.title} at ${job.company}`, `${job.location} - ${job.source}`, job.applyUrl].join("\n")
-  );
+  const scrapeTime = formatScrapeTime(new Date());
+  const lines = jobs.slice(0, 10).map((job) => {
+    const title = compactLine(job.title);
+    const company = compactLine(job.company) || "Unknown";
+    const location = compactLine(job.location) || "Unknown";
+    const salary = compactLine(job.salary) || "Salary not listed";
+    const techStack = formatTechStack(job.technologies);
+
+    return [
+      `${title} (${job.source})`,
+      `${company} - ${location}`,
+      salary,
+      "",
+      techStack,
+      "",
+      job.applyUrl
+    ].join("\n");
+  });
 
   const suffix = jobs.length > 10 ? `\n\nAnd ${jobs.length - 10} more new jobs.` : "";
-  return `New matching jobs found:\n\n${lines.join("\n\n")}${suffix}`;
+  return `New matching jobs found\nScrape time: ${scrapeTime}\n\n${lines.join("\n\n")}${suffix}`;
+}
+
+function formatScrapeTime(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+}
+
+function formatTechStack(technologies: string[] | undefined): string {
+  if (!technologies || technologies.length === 0) return "Tech stack not listed";
+
+  return Array.from(new Set(technologies.map(compactLine).filter(Boolean))).slice(0, 12).join(" ");
+}
+
+function compactLine(value: string | null | undefined): string {
+  return value?.replace(/\s+/g, " ").trim() ?? "";
 }

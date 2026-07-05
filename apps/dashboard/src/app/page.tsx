@@ -1,6 +1,6 @@
 import { BriefcaseBusiness, ExternalLink, Filter, Heart, Search, Star } from "lucide-react";
 import { getJobStats, listJobs } from "@job-aggregator/database";
-import { jobQuerySchema } from "@job-aggregator/shared";
+import { jobQuerySchema, type JobQuery } from "@job-aggregator/shared";
 import { updateJobAction } from "./actions";
 
 type PageProps = {
@@ -34,7 +34,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       </section>
 
       <form className="filters">
-        <input className="input" name="q" defaultValue={query.q} placeholder="Search jobs, companies, descriptions" />
+        <input className="input" name="q" defaultValue={query.q} placeholder="Search title, company, source, salary, description" />
+        <select className="select" name="source" defaultValue={query.source ?? ""}>
+          <option value="">Any source</option>
+          {stats.bySource.map((source) => (
+            <option value={source.source} key={source.source}>{source.source}</option>
+          ))}
+        </select>
         <select className="select" name="workMode" defaultValue={query.workMode ?? ""}>
           <option value="">Any mode</option>
           <option value="REMOTE">Remote</option>
@@ -55,6 +61,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <option value="true">Favorites</option>
           <option value="false">Not favorites</option>
         </select>
+        <select className="select" name="pageSize" defaultValue={String(query.pageSize)}>
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
         <button className="button primary" type="submit">
           <Search size={17} />
           Search
@@ -72,21 +84,25 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             jobs.items.map((job) => (
               <article className="job-card" key={job.id}>
                 <div>
-                  <h2>{job.title}</h2>
-                  <div className="meta">
-                    <span>{job.company}</span>
-                    <span>{job.location}</span>
-                    <span>{job.source}</span>
-                    <span>{job.workMode}</span>
-                    {job.salary ? <span>{job.salary}</span> : null}
+                  <h2>
+                    {job.title} <span className="source-badge">{job.source}</span>
+                  </h2>
+                  <div className="job-lines">
+                    <div>{job.company}</div>
+                    <div>{job.location}</div>
+                    <div className="detail-row">
+                      <span>{job.workMode}</span>
+                      {job.salary ? <span>{job.salary}</span> : <span>Salary not listed</span>}
+                      <span>{job.status}</span>
+                      {job.employmentType ? <span>{job.employmentType}</span> : null}
+                    </div>
                   </div>
                   <div className="badge-row">
-                    <span className="badge">{job.status}</span>
-                    {job.employmentType ? <span className="badge">{job.employmentType}</span> : null}
-                    {job.technologies.slice(0, 8).map((technology) => (
-                      <span className="badge" key={technology}>
+                    {job.technologies.length === 0 ? <span className="badge muted">Tech stack not listed</span> : null}
+                    {job.technologies.slice(0, 10).map((technology) => (
+                      <a className="badge" href={buildHref(query, { technology, page: undefined })} key={technology}>
                         {technology}
-                      </span>
+                      </a>
                     ))}
                   </div>
                   {job.description ? <p>{truncate(job.description, 260)}</p> : null}
@@ -94,13 +110,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 <div className="actions">
                   <form action={updateJobAction.bind(null, job.id)}>
                     <input type="hidden" name="favorite" value={String(!job.favorite)} />
-                    <button className={`icon-button ${job.favorite ? "active" : ""}`} type="submit" title="Toggle favorite">
+                    <button className={["icon-button", job.favorite ? "active" : ""].filter(Boolean).join(" ")} type="submit" title="Toggle favorite">
                       <Heart size={17} fill={job.favorite ? "currentColor" : "none"} />
                     </button>
                   </form>
                   <form action={updateJobAction.bind(null, job.id)}>
                     <input type="hidden" name="status" value={job.status === "SAVED" ? "NEW" : "SAVED"} />
-                    <button className={`icon-button ${job.status === "SAVED" ? "active" : ""}`} type="submit" title="Toggle saved">
+                    <button className={["icon-button", job.status === "SAVED" ? "active" : ""].filter(Boolean).join(" ")} type="submit" title="Toggle saved">
                       <Star size={17} fill={job.status === "SAVED" ? "currentColor" : "none"} />
                     </button>
                   </form>
@@ -119,7 +135,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             <span>
               Page {jobs.page} of {Math.max(jobs.pages, 1)} - {jobs.total} jobs
             </span>
-            <span>{jobs.pageSize} per page</span>
+            <div className="pager-actions">
+              <a className={["button", jobs.page <= 1 ? "disabled" : ""].filter(Boolean).join(" ")} href={buildHref(query, { page: Math.max(1, jobs.page - 1) })}>Previous</a>
+              <a className={["button", jobs.page >= jobs.pages ? "disabled" : ""].filter(Boolean).join(" ")} href={buildHref(query, { page: Math.min(Math.max(jobs.pages, 1), jobs.page + 1) })}>Next</a>
+            </div>
           </div>
         </section>
 
@@ -129,20 +148,24 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             <p>No scrape data yet.</p>
           ) : (
             stats.bySource.map((source) => (
-              <div className="source-row" key={source.source}>
+              <a className={["source-row", query.source === source.source ? "active" : ""].filter(Boolean).join(" ")} href={buildHref(query, { source: source.source, page: undefined })} key={source.source}>
                 <span>{source.source}</span>
                 <strong>{source.count}</strong>
-              </div>
+              </a>
             ))
           )}
 
           <h2 style={{ marginTop: 24 }}>Work Modes</h2>
           {stats.byWorkMode.map((mode) => (
-            <div className="source-row" key={mode.workMode}>
+            <a className={["source-row", query.workMode === mode.workMode ? "active" : ""].filter(Boolean).join(" ")} href={buildHref(query, { workMode: mode.workMode, page: undefined })} key={mode.workMode}>
               <span>{mode.workMode}</span>
               <strong>{mode.count}</strong>
-            </div>
+            </a>
           ))}
+
+          {(query.source || query.workMode || query.status || query.technology || query.favorite !== undefined || query.q) ? (
+            <a className="button clear-button" href="/">Clear filters</a>
+          ) : null}
         </aside>
       </div>
     </main>
@@ -160,10 +183,26 @@ function Stat({ label, value }: { label: string; value: number }) {
 
 function flattenSearchParams(params: Record<string, string | string[] | undefined>) {
   return Object.fromEntries(
-    Object.entries(params).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value])
+    Object.entries(params)
+      .map(([key, value]) => [key, Array.isArray(value) ? value[0] : value])
+      .filter(([, value]) => value !== undefined && value !== "")
   );
 }
 
+function buildHref(query: JobQuery, overrides: Partial<Record<keyof JobQuery, string | number | boolean | undefined>>) {
+  const params = new URLSearchParams();
+  const next = { ...query, ...overrides };
+
+  for (const [key, value] of Object.entries(next)) {
+    if (value === undefined || value === "" || value === null) continue;
+    if (key === "page" && Number(value) === 1) continue;
+    params.set(key, String(value));
+  }
+
+  const search = params.toString();
+  return search ? "/?" + search : "/";
+}
+
 function truncate(value: string, max: number) {
-  return value.length > max ? `${value.slice(0, max - 1)}...` : value;
+  return value.length > max ? value.slice(0, max - 1) + "..." : value;
 }

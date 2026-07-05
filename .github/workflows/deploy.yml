@@ -21,7 +21,7 @@ jobs:
           script_stop: true
           script: |
             set -e
-            cd /var/www/job-aggregator
+            cd /var/www/scraper
             git fetch origin main
             git reset --hard origin/main
             docker compose up -d --build

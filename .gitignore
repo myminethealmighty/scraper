@@ -5,7 +5,6 @@ dist
 coverage
 .env
 .env.local
-.env.production
 .env.docker.local
 .env.*.local
 *.log
@@ -21,4 +20,3 @@ DOCKER_AND_GITHUB_COMMANDS.md
 DEPLOY_UBUNTU_DOCKER.md
 DOCKER_LOCAL_TEST.md
 docker-compose.local.yml
-docker-compose.prod.yml

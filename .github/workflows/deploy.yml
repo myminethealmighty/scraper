@@ -1,10 +1,14 @@
-name: Deploy Job Aggregator
+name: Job Scraper
 
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+
+concurrency:
+  group: scraper-production
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -18,7 +22,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          command_timeout: 30m
+          command_timeout: 60m
 
           script_stop: true
           script: |

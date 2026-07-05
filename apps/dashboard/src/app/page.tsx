@@ -3,6 +3,7 @@ import {
   ExternalLink,
   Filter,
   Heart,
+  CalendarDays,
   Search,
   Star,
 } from "lucide-react";
@@ -103,6 +104,20 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <option value="true">Favorites</option>
           <option value="false">Not favorites</option>
         </select>
+        <input
+          className="input"
+          name="postedFrom"
+          type="date"
+          defaultValue={query.postedFrom}
+          title="Posted from"
+        />
+        <input
+          className="input"
+          name="postedTo"
+          type="date"
+          defaultValue={query.postedTo}
+          title="Posted to"
+        />
         <select
           className="select"
           name="pageSize"
@@ -145,6 +160,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                         <span>Salary not listed</span>
                       )}
                       <span>{job.status}</span>
+                      <span className="posted-date"><CalendarDays size={14} /> {formatDate(job.postedAt)}</span>
                       {job.employmentType ? (
                         <span>{job.employmentType}</span>
                       ) : null}
@@ -306,6 +322,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           query.status ||
           query.technology ||
           query.favorite !== undefined ||
+          query.postedFrom ||
+          query.postedTo ||
           query.q ? (
             <a className="button clear-button" href="/">
               Clear filters
@@ -353,6 +371,16 @@ function buildHref(
 
   const search = params.toString();
   return search ? "/?" + search : "/";
+}
+
+function formatDate(value: Date | string | null) {
+  if (!value) return "Posted date unknown";
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }).format(new Date(value));
 }
 
 function truncate(value: string, max: number) {

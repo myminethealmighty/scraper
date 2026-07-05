@@ -59,7 +59,7 @@ export class GenericHtmlJobBoardScraper implements Scraper {
         salary: inferSalary(description),
         employmentType: inferEmploymentType(description),
         workMode: inferWorkMode(description),
-        postedAt: null,
+        postedAt: inferPostedAt(description),
         description,
         technologies: extractTechnologies(`${title} ${description}`),
         applyUrl,
@@ -118,6 +118,36 @@ function inferSalary(text: string): string | null {
   return match?.[0] ?? null;
 }
 
+function inferPostedAt(text: string): Date | null {
+  const now = new Date();
+  const relative = text.match(/(?:posted\s*)?(\d+)\+?\s*(minute|hour|day|week|month|year)s?\s+ago/i);
+  if (relative) {
+    const amount = Number(relative[1] ?? 0);
+    const unit = (relative[2] ?? "day").toLowerCase();
+    const multipliers: Record<string, number> = {
+      minute: 60 * 1000,
+      hour: 60 * 60 * 1000,
+      day: 24 * 60 * 60 * 1000,
+      week: 7 * 24 * 60 * 60 * 1000,
+      month: 30 * 24 * 60 * 60 * 1000,
+      year: 365 * 24 * 60 * 60 * 1000
+    };
+
+    const multiplier = multipliers[unit] ?? 24 * 60 * 60 * 1000;
+    return new Date(now.getTime() - amount * multiplier);
+  }
+
+  if (/posted\s+today|today/i.test(text)) return now;
+  if (/posted\s+yesterday|yesterday/i.test(text)) return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  const absolute = text.match(/(?:posted\s*(?:on)?\s*)?(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{4})/i);
+  if (absolute) {
+    const parsed = new Date(absolute[1] ?? "");
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+}
 function inferEmploymentType(text: string): string | null {
   const match = text.match(/\b(full[- ]time|part[- ]time|contract|internship|freelance|temporary)\b/i);
   return match?.[0] ?? null;

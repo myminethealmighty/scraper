@@ -87,6 +87,12 @@ export async function listJobs(query: JobQuery) {
   if (query.status) where.status = query.status as JobStatus;
   if (typeof query.favorite === "boolean") where.favorite = query.favorite;
   if (query.technology) where.technologies = { array_contains: query.technology };
+  if (query.postedFrom || query.postedTo) {
+    where.postedAt = {
+      ...(query.postedFrom ? { gte: new Date(`${query.postedFrom}T00:00:00.000Z`) } : {}),
+      ...(query.postedTo ? { lte: new Date(`${query.postedTo}T23:59:59.999Z`) } : {})
+    };
+  }
 
   const skip = (query.page - 1) * query.pageSize;
   const [items, total] = await prisma.$transaction([

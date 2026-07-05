@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import { compactText, extractTechnologies, type RawJob } from "@job-aggregator/shared";
 import type { ScrapeContext, Scraper } from "../types.js";
 
@@ -9,6 +9,16 @@ type PlaywrightBoardConfig = {
   linkIncludes: string[];
   defaultLocation: string;
   waitForSelector?: string;
+  enrichDetails?: boolean;
+  detailSearchLimit?: number;
+  salarySelectors?: string[];
+};
+
+type PlaywrightListJob = {
+  title: string;
+  description: string;
+  applyUrl: string;
+  salary?: string | null;
 };
 
 export class GenericPlaywrightJobBoardScraper implements Scraper {
@@ -38,7 +48,7 @@ export class GenericPlaywrightJobBoardScraper implements Scraper {
         await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
       }
 
-      const jobs = await page.$$eval(
+      const jobs = (await page.$$eval(
         "a[href]",
         (anchors, config) => {
           const seen = new Set<string>();
@@ -77,16 +87,20 @@ export class GenericPlaywrightJobBoardScraper implements Scraper {
           linkIncludes: this.config.linkIncludes,
           keyword: context.keyword
         }
-      );
+      )) as PlaywrightListJob[];
 
-      return jobs.map((job) => ({
+      const enrichedJobs = this.config.enrichDetails
+        ? await enrichJobsWithDetails(page, jobs, this.config)
+        : jobs;
+
+      return enrichedJobs.map((job) => ({
         title: compactText(job.title),
         company: inferCompany(job.description, job.title),
         location: inferLocation(job.description) || this.config.defaultLocation,
-        salary: inferSalary(job.description),
+        salary: job.salary ?? inferSalary(job.description),
         employmentType: inferEmploymentType(job.description),
         workMode: inferWorkMode(job.description),
-        postedAt: null,
+        postedAt: inferPostedAt(job.description),
         description: compactText(job.description),
         technologies: extractTechnologies(`${job.title} ${job.description}`),
         applyUrl: job.applyUrl,
@@ -117,7 +131,9 @@ export function createLinkedInScraper(): Scraper {
       `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent("Myanmar Thailand Singapore")}`,
     linkIncludes: ["/jobs/view/"],
     defaultLocation: "Myanmar / Thailand / Singapore",
-    waitForSelector: "a[href*='/jobs/view/']"
+    waitForSelector: "a[href*='/jobs/view/']",
+    enrichDetails: true,
+    detailSearchLimit: 12
   });
 }
 
@@ -127,7 +143,10 @@ export function createJobsDbThailandScraper(): Scraper {
     baseUrl: "https://th.jobsdb.com",
     searchUrl: (keyword) => `https://th.jobsdb.com/jobs?keywords=${encodeURIComponent(keyword)}`,
     linkIncludes: ["/job/"],
-    defaultLocation: "Thailand"
+    defaultLocation: "Thailand",
+    enrichDetails: true,
+    detailSearchLimit: 12,
+    salarySelectors: ['[data-automation="job-detail-salary"]']
   });
 }
 
@@ -137,8 +156,55 @@ export function createJobsDbSingaporeScraper(): Scraper {
     baseUrl: "https://sg.jobsdb.com",
     searchUrl: (keyword) => `https://sg.jobsdb.com/jobs?keywords=${encodeURIComponent(keyword)}`,
     linkIncludes: ["/job/"],
-    defaultLocation: "Singapore"
+    defaultLocation: "Singapore",
+    enrichDetails: true,
+    detailSearchLimit: 12,
+    salarySelectors: ['[data-automation="job-detail-salary"]']
   });
+}
+
+async function enrichJobsWithDetails(
+  page: Page,
+  jobs: PlaywrightListJob[],
+  config: PlaywrightBoardConfig
+): Promise<PlaywrightListJob[]> {
+  const limit = config.detailSearchLimit ?? jobs.length;
+  const enrichedJobs: PlaywrightListJob[] = [];
+
+  for (const [index, job] of jobs.entries()) {
+    if (index >= limit) {
+      enrichedJobs.push(job);
+      continue;
+    }
+
+    try {
+      await page.goto(job.applyUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
+
+      const detail = await page.evaluate((salarySelectors) => {
+        const salaryText =
+          salarySelectors
+            .map((selector) => document.querySelector(selector)?.textContent?.replace(/\s+/g, " ").trim() ?? "")
+            .find(Boolean) ?? "";
+        const bodyText = document.body?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+
+        return { salaryText, bodyText };
+      }, config.salarySelectors ?? []);
+
+      const detailDescription = compactText(detail.bodyText || job.description).slice(0, 12_000);
+      const salary = inferSalary(`${detail.salaryText} ${detail.bodyText}`) ?? job.salary ?? inferSalary(job.description);
+
+      enrichedJobs.push({
+        ...job,
+        description: detailDescription || job.description,
+        salary
+      });
+    } catch {
+      enrichedJobs.push(job);
+    }
+  }
+
+  return enrichedJobs;
 }
 
 function inferCompany(description: string, title: string): string {
@@ -153,10 +219,46 @@ function inferLocation(text: string): string | null {
 }
 
 function inferSalary(text: string): string | null {
-  const match = text.match(/(?:MMK|USD|SGD|THB|\$|฿)\s?[0-9,.]+(?:\s?[-–]\s?(?:MMK|USD|SGD|THB|\$|฿)?\s?[0-9,.]+)?/i);
-  return match?.[0] ?? null;
+  const currencyAmount = String.raw`(?:(?:MMK|USD|SGD|THB)\s*)?[$฿€£]\s*\d[\d,.]*(?:\.\d+)?\s?[kKmM]?`;
+  const codeAmount = String.raw`(?:MMK|USD|SGD|THB)\s*\d[\d,.]*(?:\.\d+)?\s?[kKmM]?`;
+  const period = String.raw`(?:\s*(?:/|per)\s*(?:yr|year|month|mo|hour|hr))?`;
+  const rangeTail = String.raw`(?:\s*[-–]\s*(?:(?:MMK|USD|SGD|THB)\s*)?[$฿€£]?\s*\d[\d,.]*(?:\.\d+)?\s?[kKmM]?(?:\s*(?:/|per)\s*(?:yr|year|month|mo|hour|hr))?)?`;
+  const trailingPeriod = String.raw`(?:\s*per\s+\w+)?`;
+  const match = text.match(new RegExp(`(?:${currencyAmount}|${codeAmount})${period}${rangeTail}${trailingPeriod}`, "i"));
+
+  return match ? compactText(match[0]) : null;
 }
 
+function inferPostedAt(text: string): Date | null {
+  const now = new Date();
+  const relative = text.match(/(?:posted\s*)?(\d+)\+?\s*(minute|hour|day|week|month|year)s?\s+ago/i);
+  if (relative) {
+    const amount = Number(relative[1] ?? 0);
+    const unit = (relative[2] ?? "day").toLowerCase();
+    const multipliers: Record<string, number> = {
+      minute: 60 * 1000,
+      hour: 60 * 60 * 1000,
+      day: 24 * 60 * 60 * 1000,
+      week: 7 * 24 * 60 * 60 * 1000,
+      month: 30 * 24 * 60 * 60 * 1000,
+      year: 365 * 24 * 60 * 60 * 1000
+    };
+
+    const multiplier = multipliers[unit] ?? 24 * 60 * 60 * 1000;
+    return new Date(now.getTime() - amount * multiplier);
+  }
+
+  if (/posted\s+today|today/i.test(text)) return now;
+  if (/posted\s+yesterday|yesterday/i.test(text)) return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  const absolute = text.match(/(?:posted\s*(?:on)?\s*)?(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{4})/i);
+  if (absolute) {
+    const parsed = new Date(absolute[1] ?? "");
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+}
 function inferEmploymentType(text: string): string | null {
   const match = text.match(/\b(full[- ]time|part[- ]time|contract|internship|freelance|temporary)\b/i);
   return match?.[0] ?? null;

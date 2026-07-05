@@ -1,4 +1,3 @@
-import { ArbeitnowScraper } from "./scrapers/arbeitnow.js";
 import { createAloteScraper, createJobNetScraper } from "./scrapers/generic-html.js";
 import {
   createJobsDbSingaporeScraper,
@@ -14,7 +13,6 @@ import type { Scraper } from "./types.js";
 export function createScrapers(): Scraper[] {
   return [
     new RemotiveScraper(),
-    new ArbeitnowScraper(),
     createJobSpaceScraper(),
     createJobNetScraper(),
     createAloteScraper(),

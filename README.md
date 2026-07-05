@@ -1,6 +1,6 @@
 # Job Scraper
 
-A production-minded TypeScript monorepo that scrapes developer jobs, deduplicates them, stores them in MySQL with Prisma, sends optional Telegram/Discord notifications, and exposes a Next.js dashboard plus REST API.
+A production-minded TypeScript monorepo for scraping configured job sources, matching configured search terms, deduplicating results, storing them in MySQL with Prisma, sending optional Telegram/Discord notifications, and exposing a Next.js dashboard plus REST API.
 
 ## Architecture
 
@@ -23,7 +23,7 @@ packages/
 1. `apps/worker` or `apps/scraper` starts a scrape run.
 2. `packages/shared` validates environment variables with Zod and creates the Pino logger.
 3. `packages/scraper-core` loads all registered scrapers from `registry.ts`.
-4. Each scraper searches every configured keyword.
+4. Each scraper searches the configured keywords, roles, or domain terms.
 5. API-based sources use Axios/fetch-style requests; static pages use Cheerio; dynamic pages use Playwright.
 6. Each result is validated as a `RawJob`.
 7. `packages/database` normalizes technologies, creates a duplicate fingerprint, and upserts into MySQL.
@@ -34,10 +34,10 @@ packages/
 ## Features
 
 - Scrapes multiple sources with one scraper class per website.
-- Uses direct APIs for Remotive and Arbeitnow, Cheerio for Remote OK, JobNet, and Alote, and Playwright for JobSpace, LinkedIn, JobsDB, and We Work Remotely.
-- Searches React, Next.js, Laravel, PHP, TypeScript, Node.js, Frontend, Front End, Backend, Back End, Full Stack, Software Developer, and Software Engineer by default.
-- Extracts title, company, location, salary, employment type, work mode, dates, description, technologies, apply URL, and source.
-- Normalizes technologies such as `ReactJS` to `React` and `NodeJS` to `Node.js`.
+- Supports source adapters that can use direct APIs, Cheerio for static HTML, or Playwright for dynamic pages.
+- Searches terms from configuration, so the same scraper pipeline can target different roles, industries, skills, or descriptions without changing core code.
+- Extracts title, company, location, salary, employment type, work mode, dates, description, tags/technologies, apply URL, and source.
+- Normalizes common tags and technology names such as `ReactJS` to `React` and `NodeJS` to `Node.js`.
 - Deduplicates by `applyUrl` or company + title + location fingerprint.
 - Schedules daily scraping at noon by default with `node-cron`.
 - Sends notifications for newly created jobs through Telegram or Discord.
@@ -198,7 +198,7 @@ curl http://127.0.0.1:3010/api/stats
 ## REST API
 
 - `GET /api/jobs`
-- `GET /api/jobs?q=React&workMode=REMOTE&technology=TypeScript&status=NEW&favorite=true`
+- `GET /api/jobs?q=remote&workMode=REMOTE&technology=TypeScript&status=NEW&favorite=true`
 - `GET /api/jobs/:id`
 - `PATCH /api/jobs/:id`
 - `GET /api/stats`
@@ -253,7 +253,7 @@ NOTIFIER_TIMING="batch"   # send whenever enough new jobs are collected
 NOTIFIER_BATCH_SIZE="10"  # used by batch mode
 ```
 
-`end` is the default and is the quietest option. `source` is a good balance for long scrapes because Remotive, JobNet, LinkedIn, and other sources report separately. `batch` is useful when an empty database creates many jobs and you want updates while the scrape is still running.
+`end` is the default and is the quietest option. `source` is a good balance for long scrapes because each configured source reports separately. `batch` is useful when an empty database creates many jobs and you want updates while the scrape is still running.
 
 ## Add A New Job Site
 
@@ -275,20 +275,11 @@ export class ExampleScraper implements Scraper {
 
 Then register it in `packages/scraper-core/src/registry.ts`.
 
-## Current Sources
+## Source Adapters
 
-- Remotive
-- Arbeitnow
-- JobSpace Myanmar
-- JobNet Myanmar
-- Alote Myanmar
-- LinkedIn public jobs search
-- JobsDB Thailand
-- JobsDB Singapore
-- Remote OK
-- We Work Remotely
+The scraper layer is adapter-based. Each source implements the same `Scraper` interface, so additional job boards can be added without changing the orchestration, persistence, dashboard, or notification code.
 
-LinkedIn and JobsDB can challenge or block automated traffic. Their scrapers are best-effort and isolated, so failures are logged into `ScrapeRun` without stopping the other sources.
+The repository includes several bundled adapters as examples, covering API-based sources, static HTML parsing, and Playwright-driven dynamic pages. Some public job boards may challenge, rate-limit, or block automated traffic; scraper failures are isolated and logged into `ScrapeRun` without stopping other sources.
 
 ## Database Notes
 

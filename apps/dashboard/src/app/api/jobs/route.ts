@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { listJobs } from "@job-aggregator/database";
-import { jobQuerySchema } from "@job-aggregator/shared";
+import { listJobs } from "@job-scraper/database";
+import { jobQuerySchema } from "@job-scraper/shared";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

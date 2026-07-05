@@ -1,7 +1,7 @@
-import { getPrisma } from "@job-aggregator/database";
-import { createNotifier } from "@job-aggregator/notifier";
-import { runScrapers } from "@job-aggregator/scraper-core";
-import { getConfig, logger } from "@job-aggregator/shared";
+import { getPrisma } from "@job-scraper/database";
+import { createNotifier } from "@job-scraper/notifier";
+import { runScrapers } from "@job-scraper/scraper-core";
+import { getConfig, logger } from "@job-scraper/shared";
 
 async function main() {
   const config = getConfig();

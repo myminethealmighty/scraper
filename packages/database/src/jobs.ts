@@ -6,7 +6,7 @@ import {
   type JobQuery,
   type RawJob,
   type UpdateJobInput
-} from "@job-aggregator/shared";
+} from "@job-scraper/shared";
 import { getPrisma } from "./prisma.js";
 
 export type JobRecord = Omit<Job, "technologies"> & {

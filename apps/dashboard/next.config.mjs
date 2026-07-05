@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: [
-    "@job-aggregator/database",
-    "@job-aggregator/shared"
+    "@job-scraper/database",
+    "@job-scraper/shared"
   ]
 };
 

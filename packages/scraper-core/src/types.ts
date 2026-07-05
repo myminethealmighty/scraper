@@ -1,4 +1,4 @@
-import type { RawJob } from "@job-aggregator/shared";
+import type { RawJob } from "@job-scraper/shared";
 
 export type ScrapeContext = {
   keyword: string;

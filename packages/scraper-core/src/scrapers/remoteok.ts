@@ -1,6 +1,6 @@
 import axios from "axios";
-import { parseRemoteOkHtml } from "@job-aggregator/parsers";
-import type { RawJob } from "@job-aggregator/shared";
+import { parseRemoteOkHtml } from "@job-scraper/parsers";
+import type { RawJob } from "@job-scraper/shared";
 import type { ScrapeContext, Scraper } from "../types.js";
 
 export class RemoteOkScraper implements Scraper {
@@ -13,7 +13,7 @@ export class RemoteOkScraper implements Scraper {
       {
         timeout: 20_000,
         headers: {
-          "user-agent": "job-aggregator/0.1 (+https://localhost)"
+          "user-agent": "job-scraper/0.1 (+https://localhost)"
         }
       }
     );

@@ -1,20 +1,20 @@
 {
-  "name": "job-aggregator",
+  "name": "job-scraper",
   "version": "0.1.0",
   "private": true,
-  "description": "Full-stack job aggregator and scraper monorepo.",
+  "description": "Full-stack job scraper monorepo.",
   "scripts": {
-    "build": "npm run build -w @job-aggregator/shared && npm run build -w @job-aggregator/parsers && npm run build -w @job-aggregator/notifier && npm run build -w @job-aggregator/database && npm run build -w @job-aggregator/scraper-core && npm run build -w apps-scraper && npm run build -w apps-worker && npm run build -w apps-dashboard",
+    "build": "npm run build -w @job-scraper/shared && npm run build -w @job-scraper/parsers && npm run build -w @job-scraper/notifier && npm run build -w @job-scraper/database && npm run build -w @job-scraper/scraper-core && npm run build -w apps-scraper && npm run build -w apps-worker && npm run build -w apps-dashboard",
     "dev": "npm run dev -w apps/dashboard",
     "dev:dashboard": "npm run dev -w apps/dashboard",
     "dev:worker": "npm run dev -w apps/worker",
     "notify:test": "npm run notify:test -w apps/scraper",
     "scrape": "npm run scrape -w apps/scraper",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run build -w @job-aggregator/shared && npm run build -w @job-aggregator/parsers && npm run build -w @job-aggregator/notifier && npm run build -w @job-aggregator/database && npm run build -w @job-aggregator/scraper-core && npm run typecheck -w apps-scraper && npm run typecheck -w apps-worker && npm run typecheck -w apps-dashboard",
-    "db:generate": "npm run db:generate -w @job-aggregator/database",
-    "db:migrate": "npm run db:migrate -w @job-aggregator/database",
-    "db:studio": "npm run db:studio -w @job-aggregator/database",
+    "typecheck": "npm run build -w @job-scraper/shared && npm run build -w @job-scraper/parsers && npm run build -w @job-scraper/notifier && npm run build -w @job-scraper/database && npm run build -w @job-scraper/scraper-core && npm run typecheck -w apps-scraper && npm run typecheck -w apps-worker && npm run typecheck -w apps-dashboard",
+    "db:generate": "npm run db:generate -w @job-scraper/database",
+    "db:migrate": "npm run db:migrate -w @job-scraper/database",
+    "db:studio": "npm run db:studio -w @job-scraper/database",
     "postinstall": "npm run db:generate"
   },
   "workspaces": [

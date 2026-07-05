@@ -1,5 +1,5 @@
 {
-  "name": "@job-aggregator/scraper-core",
+  "name": "@job-scraper/scraper-core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,10 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@job-aggregator/database": "*",
-    "@job-aggregator/notifier": "*",
-    "@job-aggregator/parsers": "*",
-    "@job-aggregator/shared": "*",
+    "@job-scraper/database": "*",
+    "@job-scraper/notifier": "*",
+    "@job-scraper/parsers": "*",
+    "@job-scraper/shared": "*",
     "axios": "^1.7.9",
     "cheerio": "^1.0.0",
     "playwright": "^1.49.1",

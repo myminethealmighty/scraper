@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { loadEnvFromNearestFile } from "@job-aggregator/shared";
+import { loadEnvFromNearestFile } from "@job-scraper/shared";
 
 let prisma: PrismaClient | null = null;
 

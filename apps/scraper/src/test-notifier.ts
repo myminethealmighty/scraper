@@ -1,5 +1,5 @@
-import { createNotifier } from "@job-aggregator/notifier";
-import { getConfig, logger } from "@job-aggregator/shared";
+import { createNotifier } from "@job-scraper/notifier";
+import { getConfig, logger } from "@job-scraper/shared";
 
 async function main() {
   const config = getConfig();
@@ -17,7 +17,7 @@ async function main() {
     },
   ]);
 
-  logger.info("Notification test sent");
+  logger.info("Notification test completed");
 }
 
 main().catch((error) => {

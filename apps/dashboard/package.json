@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@job-aggregator/database": "*",
-    "@job-aggregator/shared": "*",
+    "@job-scraper/database": "*",
+    "@job-scraper/shared": "*",
     "@prisma/client": "^6.1.0",
     "lucide-react": "^0.468.0",
     "next": "^16.2.10",

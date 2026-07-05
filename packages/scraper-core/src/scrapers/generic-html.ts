@@ -1,6 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
-import { compactText, extractTechnologies, type RawJob } from "@job-aggregator/shared";
+import { compactText, extractTechnologies, type RawJob } from "@job-scraper/shared";
 import type { ScrapeContext, Scraper } from "../types.js";
 
 type HtmlBoardConfig = {
@@ -24,7 +24,7 @@ export class GenericHtmlJobBoardScraper implements Scraper {
       timeout: 25_000,
       headers: {
         accept: "text/html,application/xhtml+xml",
-        "user-agent": "Mozilla/5.0 (compatible; job-aggregator/0.1)"
+        "user-agent": "Mozilla/5.0 (compatible; job-scraper/0.1)"
       }
     });
 

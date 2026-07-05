@@ -21,6 +21,25 @@ enum JobStatus {
   ARCHIVED
 }
 
+enum SearchTermType {
+  ROLE
+  SKILL
+  KEYWORD
+  LOCATION
+  COMPANY
+}
+
+enum NotificationChannel {
+  TELEGRAM
+  DISCORD
+}
+
+enum NotificationStatus {
+  SENT
+  FAILED
+  SKIPPED
+}
+
 model Job {
   id             String    @id @default(cuid())
   title          String    @db.VarChar(512)
@@ -42,6 +61,8 @@ model Job {
   lastSeenAt     DateTime  @updatedAt
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  userMatches    UserJobMatch[]
+  notifications  NotificationLog[]
 
   @@index([source])
   @@index([company])
@@ -60,4 +81,129 @@ model ScrapeRun {
   jobsCreated Int      @default(0)
   jobsUpdated Int      @default(0)
   error       String?  @db.Text
+}
+
+model TelegramUser {
+  id            String            @id @default(cuid())
+  chatId        String            @unique @db.VarChar(64)
+  username      String?           @db.VarChar(191)
+  firstName     String?           @db.VarChar(191)
+  lastName      String?           @db.VarChar(191)
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  profiles      SearchProfile[]
+  notifications NotificationLog[]
+
+  @@index([isActive])
+}
+
+model SearchProfile {
+  id            String            @id @default(cuid())
+  userId        String
+  name          String            @db.VarChar(191)
+  enabled       Boolean           @default(true)
+  frequency     String            @default("daily") @db.VarChar(64)
+  maxJobAgeDays Int               @default(92)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  user          TelegramUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources       SearchSource[]
+  terms         SearchTerm[]
+  matches       UserJobMatch[]
+  notifications NotificationLog[]
+
+  @@index([userId])
+  @@index([enabled])
+}
+
+model SearchSource {
+  id          String        @id @default(cuid())
+  profileId   String
+  sourceKey   String        @db.VarChar(64)
+  sourceName  String        @db.VarChar(191)
+  enabled     Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  profile     SearchProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, sourceKey])
+  @@index([sourceKey])
+  @@index([enabled])
+}
+
+model SearchTerm {
+  id              String         @id @default(cuid())
+  profileId       String
+  value           String         @db.VarChar(191)
+  normalizedValue String         @db.VarChar(191)
+  type            SearchTermType @default(KEYWORD)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  profile         SearchProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, normalizedValue, type])
+  @@index([normalizedValue])
+  @@index([type])
+}
+
+model UserJobMatch {
+  id            String        @id @default(cuid())
+  profileId     String
+  jobId         String
+  score         Int           @default(0)
+  matchedTerms  Json
+  matchedFields Json
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  profile       SearchProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  job           Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, jobId])
+  @@index([jobId])
+  @@index([score])
+}
+
+model NotificationLog {
+  id          String             @id @default(cuid())
+  userId      String
+  profileId   String?
+  jobId       String?
+  channel     NotificationChannel
+  recipient   String             @db.VarChar(191)
+  status      NotificationStatus @default(SENT)
+  messageHash String?            @db.VarChar(191)
+  error       String?            @db.Text
+  sentAt      DateTime           @default(now())
+  user        TelegramUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile     SearchProfile?     @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  job         Job?               @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, jobId, channel])
+  @@index([profileId])
+  @@index([status])
+  @@index([sentAt])
+}
+
+model TaxonomyTerm {
+  id              String          @id @default(cuid())
+  name            String          @unique @db.VarChar(191)
+  normalizedName  String          @unique @db.VarChar(191)
+  category        SearchTermType  @default(KEYWORD)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  aliases         TaxonomyAlias[]
+
+  @@index([category])
+}
+
+model TaxonomyAlias {
+  id              String       @id @default(cuid())
+  termId          String
+  alias           String       @db.VarChar(191)
+  normalizedAlias String       @unique @db.VarChar(191)
+  createdAt       DateTime     @default(now())
+  term            TaxonomyTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@index([termId])
 }

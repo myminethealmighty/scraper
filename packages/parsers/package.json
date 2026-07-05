@@ -1,5 +1,5 @@
 {
-  "name": "@job-aggregator/parsers",
+  "name": "@job-scraper/parsers",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@job-aggregator/shared": "*",
+    "@job-scraper/shared": "*",
     "cheerio": "^1.0.0"
   }
 }

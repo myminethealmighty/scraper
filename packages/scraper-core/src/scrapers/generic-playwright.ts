@@ -1,5 +1,5 @@
 import { chromium, type Page } from "playwright";
-import { compactText, extractTechnologies, type RawJob } from "@job-aggregator/shared";
+import { compactText, extractTechnologies, type RawJob } from "@job-scraper/shared";
 import type { ScrapeContext, Scraper } from "../types.js";
 
 type PlaywrightBoardConfig = {

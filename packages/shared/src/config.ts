@@ -14,7 +14,7 @@ export const defaultKeywords = [
   "Back End",
   "Full Stack",
   "Software Developer",
-  "Software Engineer"
+  "Software Engineer",
 ];
 
 const boolish = z
@@ -24,12 +24,12 @@ const boolish = z
 
 const optionalString = z.preprocess(
   (value) => (value === "" ? undefined : value),
-  z.string().optional()
+  z.string().optional(),
 );
 
 const optionalUrl = z.preprocess(
   (value) => (value === "" ? undefined : value),
-  z.string().url().optional()
+  z.string().url().optional(),
 );
 
 export const appConfigSchema = z.object({
@@ -41,18 +41,20 @@ export const appConfigSchema = z.object({
       value
         .split(",")
         .map((keyword) => keyword.trim())
-        .filter(Boolean)
+        .filter(Boolean),
     ),
-  SCRAPER_CRON: z.string().default("0 * * * *"),
+  SCRAPER_CRON: z.string().default("0 12 * * *"),
   SCRAPER_CONCURRENCY: z.coerce.number().int().positive().default(2),
   SCRAPER_RATE_LIMIT_MS: z.coerce.number().int().nonnegative().default(1200),
   SCRAPER_HEADLESS: boolish.default("true"),
   SCRAPER_MAX_RETRIES: z.coerce.number().int().nonnegative().default(3),
   NOTIFIER_PROVIDER: z.enum(["none", "telegram", "discord"]).default("none"),
+  NOTIFIER_TIMING: z.enum(["end", "source", "batch"]).default("end"),
+  NOTIFIER_BATCH_SIZE: z.coerce.number().int().positive().default(10),
   TELEGRAM_BOT_TOKEN: optionalString,
   TELEGRAM_CHAT_ID: optionalString,
   DISCORD_WEBHOOK_URL: optionalUrl,
-  NEXT_PUBLIC_APP_NAME: z.string().default("Job Aggregator")
+  NEXT_PUBLIC_APP_NAME: z.string().default("Job Scraper"),
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;

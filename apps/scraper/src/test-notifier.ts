@@ -8,13 +8,13 @@ async function main() {
   await notifier.notifyNewJobs([
     {
       title: "Telegram notifier test",
-      company: "Job Aggregator",
+      company: "Job Scraper",
       location: "Local",
       salary: "$120 - $170 /hour",
       technologies: ["React", "TypeScript", "Node.js", "Laravel"],
       applyUrl: "http://localhost:3000",
-      source: "System Test"
-    }
+      source: "System Test",
+    },
   ]);
 
   logger.info("Notification test sent");

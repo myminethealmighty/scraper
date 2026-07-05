@@ -20,9 +20,11 @@ export async function runScrapers(options: {
   const scrapers = options.scrapers ?? createScrapers();
   const log = childLogger({ module: "scraper-orchestrator" });
   const summaries: ScrapeSummary[] = [];
-  const allCreated: NotificationJob[] = [];
+  const dispatcher = new NotificationDispatcher(options.notifier, config.NOTIFIER_TIMING, config.NOTIFIER_BATCH_SIZE);
 
   for (const scraper of scrapers) {
+    const sourceCreated: NotificationJob[] = [];
+
     for (const keyword of config.SCRAPER_KEYWORDS) {
       const sourceLog = log.child({ scraper: scraper.name, keyword });
       const run = await startScrapeRun(scraper.name);
@@ -50,17 +52,10 @@ export async function runScrapers(options: {
           .map((result) => result.data);
 
         const result = await upsertJobs(validJobs);
-        allCreated.push(
-          ...result.created.map((job) => ({
-            title: job.title,
-            company: job.company,
-            location: job.location,
-            salary: job.salary,
-            technologies: Array.isArray(job.technologies) ? job.technologies.filter((technology): technology is string => typeof technology === "string") : [],
-            applyUrl: job.applyUrl,
-            source: job.source
-          }))
-        );
+        const createdJobs = result.created.map(toNotificationJob);
+        sourceCreated.push(...createdJobs);
+        await dispatcher.add(createdJobs);
+
         summaries.push({
           source: scraper.name,
           keyword,
@@ -88,9 +83,82 @@ export async function runScrapers(options: {
 
       await sleep(config.SCRAPER_RATE_LIMIT_MS);
     }
+
+    await dispatcher.flushSource(sourceCreated);
   }
 
-  await options.notifier.notifyNewJobs(allCreated);
+  await dispatcher.flushEnd();
 
   return summaries;
+}
+
+function toNotificationJob(job: {
+  title: string;
+  company: string;
+  location: string;
+  salary: string | null;
+  technologies: unknown;
+  applyUrl: string;
+  source: string;
+}): NotificationJob {
+  return {
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    salary: job.salary,
+    technologies: Array.isArray(job.technologies)
+      ? job.technologies.filter((technology): technology is string => typeof technology === "string")
+      : [],
+    applyUrl: job.applyUrl,
+    source: job.source
+  };
+}
+
+class NotificationDispatcher {
+  private readonly pending: NotificationJob[] = [];
+
+  constructor(
+    private readonly notifier: Notifier,
+    private readonly timing: AppConfig["NOTIFIER_TIMING"],
+    private readonly batchSize: number
+  ) {}
+
+  async add(jobs: NotificationJob[]): Promise<void> {
+    if (jobs.length === 0) return;
+
+    this.pending.push(...jobs);
+
+    if (this.timing !== "batch") return;
+
+    while (this.pending.length >= this.batchSize) {
+      await this.notify(this.pending.splice(0, this.batchSize));
+    }
+  }
+
+  async flushSource(jobs: NotificationJob[]): Promise<void> {
+    if (this.timing !== "source" || jobs.length === 0) return;
+
+    await this.notify(jobs);
+    this.removeFromPending(jobs.length);
+  }
+
+  async flushEnd(): Promise<void> {
+    if (this.pending.length === 0) return;
+
+    if (this.timing === "end" || this.timing === "batch") {
+      await this.notify(this.pending.splice(0));
+    }
+  }
+
+  private async notify(jobs: NotificationJob[]): Promise<void> {
+    try {
+      await this.notifier.notifyNewJobs(jobs);
+    } catch (error) {
+      childLogger({ module: "notification-dispatcher" }).warn({ err: error }, "New-job notification failed");
+    }
+  }
+
+  private removeFromPending(count: number): void {
+    if (count > 0) this.pending.splice(0, count);
+  }
 }

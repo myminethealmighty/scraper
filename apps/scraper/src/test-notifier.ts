@@ -10,6 +10,8 @@ async function main() {
       title: "Telegram notifier test",
       company: "Job Aggregator",
       location: "Local",
+      salary: "$120 - $170 /hour",
+      technologies: ["React", "TypeScript", "Node.js", "Laravel"],
       applyUrl: "http://localhost:3000",
       source: "System Test"
     }

@@ -55,6 +55,8 @@ export async function runScrapers(options: {
             title: job.title,
             company: job.company,
             location: job.location,
+            salary: job.salary,
+            technologies: Array.isArray(job.technologies) ? job.technologies.filter((technology): technology is string => typeof technology === "string") : [],
             applyUrl: job.applyUrl,
             source: job.source
           }))

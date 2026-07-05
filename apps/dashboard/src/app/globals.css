@@ -88,7 +88,7 @@ select {
 
 .filters {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) repeat(4, minmax(130px, 0.7fr)) auto;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(6, minmax(118px, 0.65fr)) auto;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -154,17 +154,41 @@ select {
 }
 
 .job-card h2 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 0;
   font-size: 18px;
+  line-height: 1.35;
 }
 
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border-radius: 999px;
+  background: #e6f4f1;
+  color: var(--accent-strong);
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.job-lines {
+  display: grid;
+  gap: 5px;
   margin-top: 8px;
   color: var(--muted);
   font-size: 14px;
+}
+
+.detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: #344054;
+  font-weight: 700;
 }
 
 .badge-row {
@@ -184,6 +208,14 @@ select {
   padding: 0 9px;
   font-size: 12px;
   font-weight: 700;
+}
+
+.badge:hover {
+  color: var(--accent-strong);
+}
+
+.badge.muted {
+  color: var(--muted);
 }
 
 .actions {
@@ -221,8 +253,15 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 0;
+  padding: 10px 8px;
   border-bottom: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.source-row:hover,
+.source-row.active {
+  background: #e6f4f1;
+  color: var(--accent-strong);
 }
 
 .source-row:last-child {
@@ -239,9 +278,25 @@ select {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 14px 16px;
   border-top: 1px solid var(--line);
   color: var(--muted);
+}
+
+.pager-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.button.disabled {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.clear-button {
+  width: 100%;
+  margin-top: 16px;
 }
 
 @media (max-width: 980px) {

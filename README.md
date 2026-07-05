@@ -109,24 +109,18 @@ npm run dev:worker
 
 ## Docker
 
-Docker Compose no longer uses PostgreSQL. It includes a MySQL service mapped to host port `3307` to avoid conflicting with your local MySQL Workbench server on `3306`.
+Docker Compose uses the MySQL connection from .env. On production, this points to the existing host MySQL server through host.docker.internal.
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-Inside Docker, services use `mysql://job_user:job_password@mysql:3306/job_aggregator`.
+Inside Docker, services read .env; keep real credentials out of git. On the Ubuntu server, keep the file at /var/www/scraper/.env.
 
 For local development with your Workbench database, prefer the non-Docker flow above.
 
-For Ubuntu server production deployment with existing Nginx apps, use:
-
-```text
-DEPLOY_UBUNTU_DOCKER.md
-docker-compose.prod.yml
-.env.production.example
-```
+For Ubuntu server production deployment with existing Nginx apps, use the main docker-compose.yml file plus your server .env.
 
 For local Docker testing against your existing local MySQL, use:
 

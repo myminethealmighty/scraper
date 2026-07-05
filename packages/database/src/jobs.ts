@@ -75,6 +75,9 @@ export async function listJobs(query: JobQuery) {
       { title: { contains: query.q } },
       { company: { contains: query.q } },
       { location: { contains: query.q } },
+      { source: { contains: query.q } },
+      { salary: { contains: query.q } },
+      { employmentType: { contains: query.q } },
       { description: { contains: query.q } }
     ];
   }
@@ -89,7 +92,7 @@ export async function listJobs(query: JobQuery) {
   const [items, total] = await prisma.$transaction([
     prisma.job.findMany({
       where,
-      orderBy: [{ postedAt: "desc" }, { firstSeenAt: "desc" }],
+      orderBy: [{ firstSeenAt: "desc" }, { postedAt: "desc" }],
       skip,
       take: query.pageSize
     }),

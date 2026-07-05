@@ -25,8 +25,10 @@ async function runScheduledScrape() {
   }
 }
 
-logger.info({ cron: config.SCRAPER_CRON }, "Starting job scraper worker");
-cron.schedule(config.SCRAPER_CRON, runScheduledScrape);
+logger.info({ cron: config.SCRAPER_CRON, timeZone: config.SCRAPER_TIME_ZONE }, "Starting job scraper worker");
+cron.schedule(config.SCRAPER_CRON, runScheduledScrape, {
+  timezone: config.SCRAPER_TIME_ZONE
+});
 
 if (process.env.RUN_ON_START !== "false") {
   void runScheduledScrape();

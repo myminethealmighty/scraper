@@ -161,6 +161,9 @@ docker compose exec dashboard npm run db:migrate
 docker compose logs -f --tail=100 dashboard
 docker compose logs -f --tail=100 worker
 
+# Run one manual scrape in a disposable container
+docker compose run --rm --no-deps worker npm run scrape
+
 # Show Docker disk usage
 docker system df
 docker builder du
@@ -189,7 +192,7 @@ Then run one scrape and watch logs:
 
 ```bash
 cd /var/www/scraper
-docker compose exec worker npm run scrape
+docker compose run --rm --no-deps worker npm run scrape
 docker compose logs -f --tail=150 worker
 curl http://127.0.0.1:3010/api/stats
 ```
@@ -251,6 +254,8 @@ NOTIFIER_TIMING="end"     # send one message after the full scrape run
 NOTIFIER_TIMING="source"  # send after each job source finishes
 NOTIFIER_TIMING="batch"   # send whenever enough new jobs are collected
 NOTIFIER_BATCH_SIZE="10"  # used by batch mode
+NOTIFIER_TIME_ZONE="Asia/Yangon" # Myanmar time, UTC+06:30
+SCRAPER_TIME_ZONE="Asia/Yangon"  # cron schedule timezone, UTC+06:30
 ```
 
 `end` is the default and is the quietest option. `source` is a good balance for long scrapes because each configured source reports separately. `batch` is useful when an empty database creates many jobs and you want updates while the scrape is still running.

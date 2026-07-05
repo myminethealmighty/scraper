@@ -23,13 +23,14 @@ export class NoopNotifier implements Notifier {
 export class TelegramNotifier implements Notifier {
   constructor(
     private readonly token: string,
-    private readonly chatId: string
+    private readonly chatId: string,
+    private readonly timeZone: string
   ) {}
 
   async notifyNewJobs(jobs: NotificationJob[]): Promise<void> {
     if (jobs.length === 0) return;
 
-    const text = formatJobs(jobs);
+    const text = formatJobs(jobs, this.timeZone);
     const response = await fetch(`https://api.telegram.org/bot${this.token}/sendMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -47,7 +48,10 @@ export class TelegramNotifier implements Notifier {
 }
 
 export class DiscordNotifier implements Notifier {
-  constructor(private readonly webhookUrl: string) {}
+  constructor(
+    private readonly webhookUrl: string,
+    private readonly timeZone: string
+  ) {}
 
   async notifyNewJobs(jobs: NotificationJob[]): Promise<void> {
     if (jobs.length === 0) return;
@@ -55,7 +59,7 @@ export class DiscordNotifier implements Notifier {
     const response = await fetch(this.webhookUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content: formatJobs(jobs) })
+      body: JSON.stringify({ content: formatJobs(jobs, this.timeZone) })
     });
 
     if (!response.ok) {
@@ -71,7 +75,7 @@ export function createNotifier(config: AppConfig): Notifier {
       return new NoopNotifier();
     }
 
-    return new TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID);
+    return new TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, config.NOTIFIER_TIME_ZONE);
   }
 
   if (config.NOTIFIER_PROVIDER === "discord") {
@@ -80,14 +84,14 @@ export function createNotifier(config: AppConfig): Notifier {
       return new NoopNotifier();
     }
 
-    return new DiscordNotifier(config.DISCORD_WEBHOOK_URL);
+    return new DiscordNotifier(config.DISCORD_WEBHOOK_URL, config.NOTIFIER_TIME_ZONE);
   }
 
   return new NoopNotifier();
 }
 
-function formatJobs(jobs: NotificationJob[]): string {
-  const scrapeTime = formatScrapeTime(new Date());
+function formatJobs(jobs: NotificationJob[], timeZone: string): string {
+  const scrapeTime = formatScrapeTime(new Date(), timeZone);
   const lines = jobs.slice(0, 10).map((job) => {
     const title = compactLine(job.title);
     const company = compactLine(job.company) || "Unknown";
@@ -110,8 +114,9 @@ function formatJobs(jobs: NotificationJob[]): string {
   return `New matching jobs found\nScrape time: ${scrapeTime}\n\n${lines.join("\n\n")}${suffix}`;
 }
 
-function formatScrapeTime(date: Date): string {
+function formatScrapeTime(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
     day: "numeric",
     month: "long",
     year: "numeric",

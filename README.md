@@ -1,4 +1,4 @@
-# Job Aggregator & Scraper
+# Job Scraper
 
 A production-minded TypeScript monorepo that scrapes developer jobs, deduplicates them, stores them in MySQL with Prisma, sends optional Telegram/Discord notifications, and exposes a Next.js dashboard plus REST API.
 
@@ -39,7 +39,7 @@ packages/
 - Extracts title, company, location, salary, employment type, work mode, dates, description, technologies, apply URL, and source.
 - Normalizes technologies such as `ReactJS` to `React` and `NodeJS` to `Node.js`.
 - Deduplicates by `applyUrl` or company + title + location fingerprint.
-- Schedules hourly scraping with `node-cron`.
+- Schedules daily scraping at noon by default with `node-cron`.
 - Sends notifications for newly created jobs through Telegram or Discord.
 - Includes dashboard search, filters, saved/applied/favorite state, and statistics.
 - Uses Zod validation, Pino structured logging, retries, rate limiting, Docker, and Prisma migrations.
@@ -135,6 +135,66 @@ For Docker command and GitHub CI/CD cheat sheet, use:
 DOCKER_AND_GITHUB_COMMANDS.md
 ```
 
+### Production Docker Notes
+
+The production image contains the Node.js runtime, installed npm dependencies, compiled TypeScript packages, the built Next.js dashboard, worker/scraper code, Prisma client, Playwright system dependencies, and the Playwright Chromium browser files. It does not contain MySQL data. Production MySQL runs on the host and is reached through `host.docker.internal:3306`.
+
+Docker build cache is safe to keep. It does not hide old UI or source code: Docker invalidates the source/build layer when files under `apps/` or `packages/` change. The expensive cached layers are dependency install and Playwright browser install.
+
+Small code or UI changes should usually rebuild much faster after the first cache-friendly build. Builds become slow again when `package.json`, `package-lock.json`, `Dockerfile`, the Node base image, or the Playwright version changes, or after clearing Docker build cache.
+
+Useful production commands:
+
+```bash
+cd /var/www/scraper
+
+# Current scraper containers
+docker compose ps
+
+# Rebuild and restart this project
+docker compose up -d --build
+
+# Run migrations
+docker compose exec dashboard npm run db:migrate
+
+# Watch logs
+docker compose logs -f --tail=100 dashboard
+docker compose logs -f --tail=100 worker
+
+# Show Docker disk usage
+docker system df
+docker builder du
+
+# Remove unused build cache only
+docker builder prune
+```
+
+Avoid `docker system prune -a` on the VPS unless you have checked other Docker projects first.
+
+### Clear Production Job Data And Test One Scrape
+
+This keeps the schema and migrations but deletes collected jobs and scrape history:
+
+```sql
+USE job_aggregator;
+
+SET FOREIGN_KEY_CHECKS=0;
+TRUNCATE TABLE JobTechnology;
+TRUNCATE TABLE Job;
+TRUNCATE TABLE ScrapeRun;
+SET FOREIGN_KEY_CHECKS=1;
+```
+
+Then run one scrape and watch logs:
+
+```bash
+cd /var/www/scraper
+docker compose exec worker npm run scrape
+docker compose logs -f --tail=150 worker
+curl http://127.0.0.1:3010/api/stats
+```
+
+
 ## REST API
 
 - `GET /api/jobs`
@@ -180,6 +240,20 @@ Discord:
 NOTIFIER_PROVIDER="discord"
 DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 ```
+
+
+## Notification Timing
+
+New-job notifications can be sent in three ways:
+
+```env
+NOTIFIER_TIMING="end"     # send one message after the full scrape run
+NOTIFIER_TIMING="source"  # send after each job source finishes
+NOTIFIER_TIMING="batch"   # send whenever enough new jobs are collected
+NOTIFIER_BATCH_SIZE="10"  # used by batch mode
+```
+
+`end` is the default and is the quietest option. `source` is a good balance for long scrapes because Remotive, JobNet, LinkedIn, and other sources report separately. `batch` is useful when an empty database creates many jobs and you want updates while the scrape is still running.
 
 ## Add A New Job Site
 
@@ -246,4 +320,4 @@ npm run db:migrate       # apply migrations
 npm run db:studio        # open Prisma Studio
 npm audit --omit=dev     # dependency audit
 ```
-# scrapper
+

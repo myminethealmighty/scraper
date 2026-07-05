@@ -94,15 +94,15 @@ export class GenericPlaywrightJobBoardScraper implements Scraper {
         : jobs;
 
       return enrichedJobs.map((job) => ({
-        title: compactText(job.title),
+        title: cleanJobTitle(job.title),
         company: inferCompany(job.description, job.title),
         location: inferLocation(job.description) || this.config.defaultLocation,
         salary: job.salary ?? inferSalary(job.description),
         employmentType: inferEmploymentType(job.description),
         workMode: inferWorkMode(job.description),
         postedAt: inferPostedAt(job.description),
-        description: compactText(job.description),
-        technologies: extractTechnologies(`${job.title} ${job.description}`),
+        description: cleanJobDescription(job.description),
+        technologies: extractTechnologies(`${cleanJobTitle(job.title)} ${cleanJobDescription(job.description)}`),
         applyUrl: job.applyUrl,
         source: this.name,
         sourceJobId: job.applyUrl.split("/").filter(Boolean).at(-1) ?? null
@@ -186,12 +186,13 @@ async function enrichJobsWithDetails(
           salarySelectors
             .map((selector) => document.querySelector(selector)?.textContent?.replace(/\s+/g, " ").trim() ?? "")
             .find(Boolean) ?? "";
-        const bodyText = document.body?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+        document.querySelectorAll("script,style,noscript,template,svg").forEach((element) => element.remove());
+        const bodyText = document.body?.innerText?.replace(/\s+/g, " ").trim() ?? "";
 
         return { salaryText, bodyText };
       }, config.salarySelectors ?? []);
 
-      const detailDescription = compactText(detail.bodyText || job.description).slice(0, 12_000);
+      const detailDescription = cleanJobDescription(detail.bodyText || job.description).slice(0, 12_000);
       const salary = inferSalary(`${detail.salaryText} ${detail.bodyText}`) ?? job.salary ?? inferSalary(job.description);
 
       enrichedJobs.push({
@@ -207,6 +208,17 @@ async function enrichJobsWithDetails(
   return enrichedJobs;
 }
 
+function cleanJobTitle(value: string): string {
+  return compactText(value.replace(/\b\S*_with_bool_\S*\b/g, " "));
+}
+
+function cleanJobDescription(value: string): string {
+  return compactText(
+    value
+      .replace(/\b\S*_with_bool_\S*\b/g, " ")
+      .replace(/^\(\(env,\s*targets\).*$/s, " ")
+  );
+}
 function inferCompany(description: string, title: string): string {
   const compact = compactText(description.replace(title, " "));
   const parts = compact.split(/\s{2,}| · | - |\n/).map(compactText).filter(Boolean);

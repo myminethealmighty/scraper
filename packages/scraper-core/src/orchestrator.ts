@@ -51,8 +51,14 @@ export async function runScrapers(options: {
           })
           .map((result) => result.data);
 
-        const matchingJobs = validJobs.filter((job) => isMatchingJob(job, config.SCRAPER_KEYWORDS));
-        const skippedAsIrrelevant = validJobs.length - matchingJobs.length;
+        const freshJobs = validJobs.filter((job) => isRecentEnough(job.postedAt ?? null, config.SCRAPER_MAX_JOB_AGE_DAYS));
+        const skippedAsOld = validJobs.length - freshJobs.length;
+        if (skippedAsOld > 0) {
+          sourceLog.info({ skipped: skippedAsOld, maxAgeDays: config.SCRAPER_MAX_JOB_AGE_DAYS }, "Skipped jobs older than freshness window");
+        }
+
+        const matchingJobs = freshJobs.filter((job) => isMatchingJob(job, config.SCRAPER_KEYWORDS));
+        const skippedAsIrrelevant = freshJobs.length - matchingJobs.length;
         if (skippedAsIrrelevant > 0) {
           sourceLog.info({ skipped: skippedAsIrrelevant }, "Skipped jobs that did not match configured keywords");
         }
@@ -98,6 +104,12 @@ export async function runScrapers(options: {
   return summaries;
 }
 
+function isRecentEnough(postedAt: Date | null, maxAgeDays: number): boolean {
+  if (!postedAt) return true;
+
+  const newestAllowedAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+  return postedAt.getTime() >= Date.now() - newestAllowedAgeMs;
+}
 function toNotificationJob(job: {
   title: string;
   company: string;
@@ -222,6 +234,7 @@ class NotificationDispatcher {
 
   private async notify(jobs: NotificationJob[]): Promise<void> {
     try {
+      childLogger({ module: "notification-dispatcher" }).info({ jobs: jobs.length, timing: this.timing }, "Sending new-job notification");
       await this.notifier.notifyNewJobs(jobs);
     } catch (error) {
       childLogger({ module: "notification-dispatcher" }).warn({ err: error }, "New-job notification failed");

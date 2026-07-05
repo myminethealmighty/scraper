@@ -24,6 +24,7 @@ const optionalTextSchema = z.preprocess(emptyToUndefined, z.string().optional())
 const optionalBooleanSchema = z.preprocess(emptyToUndefined, z.coerce.boolean().optional());
 const optionalPageNumberSchema = z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional());
 const optionalPageSizeSchema = z.preprocess(emptyToUndefined, z.coerce.number().int().positive().max(100).optional());
+const optionalDateInputSchema = z.preprocess(emptyToUndefined, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional());
 
 export const jobQuerySchema = z.object({
   q: optionalTextSchema,
@@ -32,6 +33,8 @@ export const jobQuerySchema = z.object({
   technology: optionalTextSchema,
   status: z.preprocess(emptyToUndefined, jobStatusSchema.optional()),
   favorite: optionalBooleanSchema,
+  postedFrom: optionalDateInputSchema,
+  postedTo: optionalDateInputSchema,
   page: optionalPageNumberSchema.default(1),
   pageSize: optionalPageSizeSchema.default(25)
 });

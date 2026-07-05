@@ -51,6 +51,6 @@ jobs:
               cd /var/www/scraper
               git fetch origin main
               git reset --hard origin/main
-              docker compose up -d --build
+              docker compose up -d --build --force-recreate
               docker compose exec -T dashboard npm run db:migrate
               docker compose ps'

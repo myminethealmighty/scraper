@@ -1,6 +1,16 @@
 # Job Scraper
 
+[![Deploy](https://github.com/myminethealmighty/scrapper/actions/workflows/deploy.yml/badge.svg)](https://github.com/myminethealmighty/scrapper/actions/workflows/deploy.yml)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
+![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=myminethealmighty.scrapper)
+
 A production-minded TypeScript monorepo for scraping supported job portals, storing normalized jobs in MySQL, deduplicating results, and viewing them through a Next.js dashboard. The project is designed around source adapters, Prisma repositories, scheduled workers, and future database-driven search profiles.
+
+## Project Status
+
+Job Scraper is actively evolving. The current version supports manual and scheduled scraping, MySQL persistence, Docker deployment, and a dashboard. The next major product layer is profile-based Telegram subscriptions, where users choose supported portals and search terms from the bot.
 
 ## What It Does
 
@@ -41,7 +51,7 @@ packages/
 
 ## Supported Sources
 
-Supported sources are defined in [packages/scraper-core/src/sources.ts](/Users/minkhant/Desktop/MKT/scraper/packages/scraper-core/src/sources.ts). Users should choose from these supported source keys instead of entering arbitrary URLs.
+Supported sources are defined in [packages/scraper-core/src/sources.ts](packages/scraper-core/src/sources.ts). Users should choose from these supported source keys instead of entering arbitrary URLs.
 
 | Key | Source | Method |
 | --- | --- | --- |
@@ -262,6 +272,14 @@ export class ExampleScraper implements Scraper {
 ```
 
 Then register it through `packages/scraper-core/src/sources.ts` so users can select it by source key.
+
+## Open Source
+
+- [MIT License](LICENSE)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
 ## Useful Commands
 

@@ -51,7 +51,13 @@ export async function runScrapers(options: {
           })
           .map((result) => result.data);
 
-        const result = await upsertJobs(validJobs);
+        const matchingJobs = validJobs.filter((job) => isMatchingJob(job, config.SCRAPER_KEYWORDS));
+        const skippedAsIrrelevant = validJobs.length - matchingJobs.length;
+        if (skippedAsIrrelevant > 0) {
+          sourceLog.info({ skipped: skippedAsIrrelevant }, "Skipped jobs that did not match configured keywords");
+        }
+
+        const result = await upsertJobs(matchingJobs);
         const createdJobs = result.created.map(toNotificationJob);
         sourceCreated.push(...createdJobs);
         await dispatcher.add(createdJobs);
@@ -59,17 +65,17 @@ export async function runScrapers(options: {
         summaries.push({
           source: scraper.name,
           keyword,
-          found: validJobs.length,
+          found: matchingJobs.length,
           created: result.created.length,
           updated: result.updated.length
         });
 
         await finishScrapeRun(run.id, {
-          jobsFound: validJobs.length,
+          jobsFound: matchingJobs.length,
           jobsCreated: result.created.length,
           jobsUpdated: result.updated.length
         });
-        sourceLog.info({ found: validJobs.length, created: result.created.length }, "Scrape finished");
+        sourceLog.info({ found: matchingJobs.length, created: result.created.length }, "Scrape finished");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sourceLog.error({ err: error }, "Scrape failed");
@@ -112,6 +118,70 @@ function toNotificationJob(job: {
     applyUrl: job.applyUrl,
     source: job.source
   };
+}
+
+function isMatchingJob(job: {
+  title: string;
+  company: string;
+  location: string;
+  source: string;
+  description?: string | null;
+  technologies: string[];
+}, keywords: string[]): boolean {
+  const haystack = normalizeSearchText([
+    job.title,
+    job.company,
+    job.location,
+    job.source,
+    job.description ?? "",
+    ...job.technologies
+  ].join(" "));
+
+  return keywords.some((keyword) => matchesKeyword(haystack, keyword));
+}
+
+function matchesKeyword(haystack: string, keyword: string): boolean {
+  const normalizedKeyword = normalizeSearchText(keyword);
+  if (!normalizedKeyword) return false;
+
+  return keywordAliases(normalizedKeyword).some((alias) => {
+    const parts = alias.split(" ").filter(Boolean);
+    if (parts.length === 0) return false;
+    if (parts.length === 1) return hasToken(haystack, parts[0] ?? "");
+    return parts.every((part) => hasToken(haystack, part));
+  });
+}
+
+function keywordAliases(keyword: string): string[] {
+  const aliases = new Set([keyword]);
+
+  if (keyword === "next js") aliases.add("nextjs");
+  if (keyword === "node js") aliases.add("nodejs");
+  if (keyword === "type script") aliases.add("typescript");
+  if (keyword === "java script") aliases.add("javascript");
+  if (keyword === "front end") aliases.add("frontend");
+  if (keyword === "back end") aliases.add("backend");
+  if (keyword === "full stack") aliases.add("fullstack");
+
+  return Array.from(aliases);
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/c#/g, " csharp ")
+    .replace(/\.js\b/g, " js")
+    .replace(/[^a-z0-9+#]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasToken(haystack: string, token: string): boolean {
+  return new RegExp("(?:^|\\s)" + escapeRegExp(token) + "(?:$|\\s)").test(haystack);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 class NotificationDispatcher {

@@ -1,11 +1,11 @@
 import cron from "node-cron";
 import { getPrisma } from "@job-scraper/database";
-import { createNotifier } from "@job-scraper/notifier";
-import { runScrapers } from "@job-scraper/scraper-core";
+import { runProfileScrapers } from "@job-scraper/scraper-core";
 import { getConfig, logger } from "@job-scraper/shared";
+import { startTelegramBot } from "./telegram-bot.js";
 
 const config = getConfig();
-const notifier = createNotifier(config);
+startTelegramBot(config);
 let running = false;
 
 async function runScheduledScrape() {
@@ -16,7 +16,7 @@ async function runScheduledScrape() {
 
   running = true;
   try {
-    const summaries = await runScrapers({ config, notifier });
+    const summaries = await runProfileScrapers({ config });
     logger.info({ summaries }, "Scheduled scrape completed");
   } catch (error) {
     logger.error({ error }, "Scheduled scrape failed");

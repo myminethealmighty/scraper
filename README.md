@@ -6,11 +6,11 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Visitors](https://visitor-badge.laobi.icu/badge?page_id=myminethealmighty.scrapper)
 
-A production-minded TypeScript monorepo for scraping supported job portals, storing normalized jobs in MySQL, deduplicating results, and viewing them through a Next.js dashboard. The project is designed around source adapters, Prisma repositories, scheduled workers, and future database-driven search profiles.
+A production-minded TypeScript monorepo for scraping supported job portals, storing normalized jobs in MySQL, deduplicating results, sending profile-based notifications, and viewing matches through a Next.js dashboard. The project is designed around source adapters, Prisma repositories, scheduled workers, and database-driven search profiles.
 
 ## Project Status
 
-Job Scraper is actively evolving. The current version supports manual and scheduled scraping, MySQL persistence, Docker deployment, and a dashboard. The next major product layer is profile-based Telegram subscriptions, where users choose supported portals and search terms from the bot.
+Job Scraper is actively evolving. The current version supports manual and scheduled profile-based scraping, Telegram subscriptions, MySQL persistence, Docker deployment, and a dashboard. Users choose supported portals and search terms from the bot; those database records drive scraper work.
 
 ## What It Does
 
@@ -21,7 +21,7 @@ Job Scraper is actively evolving. The current version supports manual and schedu
 - Tracks scrape runs, created jobs, updated jobs, failures, and source history.
 - Supports dashboard search, filters, details, saved/applied/favorite state, and statistics.
 - Runs manually from the CLI or automatically through a scheduled worker.
-- Supports Discord webhook delivery now, with Telegram bot/profile delivery prepared at the data-model level.
+- Sends profile-based Telegram notifications in batches and keeps notification history in MySQL.
 
 ## Architecture
 
@@ -41,13 +41,14 @@ packages/
 
 ## Runtime Flow
 
-1. The manual scraper or scheduled worker loads configuration from `.env`.
-2. The scraper registry creates source adapters for the enabled supported portals.
-3. Each adapter searches one source/term group and returns `RawJob[]` records.
-4. Zod validates each raw job before persistence.
-5. The database package cleans text, infers work mode where possible, deduplicates, and upserts jobs.
-6. The orchestrator records scrape status in `ScrapeRun` and sends new-job batches to the configured notifier.
-7. The dashboard reads jobs and stats from MySQL through the database package.
+1. Telegram users start the bot and select supported portals plus search terms.
+2. The app stores those choices in `TelegramUser`, `SearchProfile`, `SearchSource`, and `SearchTerm`.
+3. The manual scraper or scheduled worker creates grouped scrape tasks by `sourceKey + normalizedValue`, so many users asking for the same source and term share one scrape.
+4. Each adapter searches one source/term group and returns `RawJob[]` records.
+5. Zod validates each raw job before persistence.
+6. The database package cleans text, infers work mode where possible, deduplicates, and upserts jobs.
+7. The orchestrator records scrape status in `ScrapeRun`, sends new-job batches to matching Telegram users, and writes `NotificationLog` rows to avoid duplicate delivery.
+8. The dashboard reads the signed-in Telegram user's matching jobs and stats from MySQL.
 
 ## Supported Sources
 
@@ -91,6 +92,8 @@ If your local MySQL `root` user has no password, use:
 ```env
 DATABASE_URL="mysql://root@127.0.0.1:3306/job_scraper"
 ```
+
+Search terms are not configured through `.env`. Users add terms through the Telegram bot, and the scraper reads them from the `SearchTerm` table.
 
 `TELEGRAM_CHAT_ID` is intentionally not part of the new env file. Telegram recipients should come from bot subscriptions saved in the database, not from one hardcoded global chat ID.
 
@@ -180,6 +183,22 @@ Avoid broad Docker cleanup commands on a shared server unless you have checked o
 
 `ScrapeRun` is the scraper audit log. Each run records the source name, status, start time, finish time, jobs found, jobs created, jobs updated, and error text when a scraper fails. It is useful for checking whether a scheduled run actually happened and which adapter failed.
 
+### Normalized Search Fields
+
+- `SearchTerm.normalizedValue` is used now. It stores a cleaned lowercase canonical value of user terms so profile scrape tasks can be grouped by source + normalized term. For example, punctuation and casing are removed before known aliases are collapsed.
+- `TaxonomyTerm.normalizedName` and `TaxonomyAlias.normalizedAlias` are schema groundwork for richer database-managed aliases later. They are not used by the current scraper matcher yet.
+
+## Dashboard Authentication
+
+When `TELEGRAM_BOT_TOKEN` is set, the dashboard requires Telegram login. Configure the bot username without `@`:
+
+```env
+TELEGRAM_BOT_TOKEN="..."
+NEXT_PUBLIC_TELEGRAM_BOT_USERNAME="your_bot_username"
+```
+
+For production, set the login domain with BotFather using `/setdomain` so Telegram allows the login widget on your dashboard domain.
+
 ## Notifications
 
 Disable notifications:
@@ -195,11 +214,27 @@ NOTIFIER_PROVIDER="discord"
 DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 ```
 
-Telegram currently uses `TELEGRAM_BOT_TOKEN` for the bot/profile direction. Global `TELEGRAM_CHAT_ID` delivery was removed so recipients can be stored per user later.
+Telegram uses `TELEGRAM_BOT_TOKEN` for bot/profile subscriptions. The dashboard login widget also needs `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` without `@`. Global `TELEGRAM_CHAT_ID` delivery was removed so recipients can be stored per user.
+
+Telegram bot subscription flow:
+
+```text
+User sends /start
+-> worker polls Telegram getUpdates
+-> TelegramUser is upserted
+-> default SearchProfile is created
+-> supported source buttons are shown
+-> user selects portals and taps Done
+-> user sends roles, skills, or keywords
+-> SearchSource and SearchTerm rows are saved
+```
+
+The worker container must be running for `/start` to be processed. If the bot token has been posted publicly, rotate it in BotFather and update `TELEGRAM_BOT_TOKEN` in production.
 
 ```env
 NOTIFIER_PROVIDER="telegram"
 TELEGRAM_BOT_TOKEN="..."
+NEXT_PUBLIC_TELEGRAM_BOT_USERNAME="your_bot_username"
 ```
 
 Notification batching:
@@ -214,9 +249,9 @@ NOTIFIER_TIME_ZONE="Asia/Yangon"
 
 ## Multi-User Search Profiles
 
-The next product layer should use database-driven search profiles instead of permanent env-only search terms.
+Search profiles are database-driven. There is no global env keyword list; the bot and dashboard use each Telegram user's saved profile.
 
-Recommended flow:
+Flow:
 
 ```text
 /start
@@ -245,13 +280,12 @@ TaxonomyTerm
 TaxonomyAlias
 ```
 
-Start new logic in this order:
+The active implementation starts in these files:
 
-1. Add the Telegram bot command/webhook handler for `/start`.
-2. Use `packages/database/src/profiles.ts` to save users, selected sources, and search terms.
-3. Use `packages/scraper-core/src/profile-plan.ts` to create grouped scrape tasks.
-4. Add a matcher that links jobs to profiles through `UserJobMatch`.
-5. Send notifications from profile recipients and record them in `NotificationLog`.
+1. `apps/worker/src/telegram-bot.ts` handles `/start`, source buttons, and term entry.
+2. `packages/database/src/profiles.ts` saves users, selected sources, and normalized search terms.
+3. `packages/scraper-core/src/profile-plan.ts` creates grouped scrape tasks.
+4. `packages/scraper-core/src/orchestrator.ts` runs each grouped scrape once, upserts jobs, and sends profile-specific notifications.
 
 ## Add A New Supported Source
 

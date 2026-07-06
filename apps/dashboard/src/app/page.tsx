@@ -7,18 +7,23 @@ import {
   Search,
   Star,
 } from "lucide-react";
-import { getJobStats, listJobs } from "@job-scraper/database";
+import { getJobStatsForTelegramUser, listJobsForTelegramUser } from "@job-scraper/database";
 import { jobQuerySchema, type JobQuery } from "@job-scraper/shared";
 import { updateJobAction } from "./actions";
+import { requireDashboardAuth } from "./auth";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export default async function DashboardPage({ searchParams }: PageProps) {
+  const session = await requireDashboardAuth();
   const params = await searchParams;
   const query = jobQuerySchema.parse(flattenSearchParams(params));
-  const [jobs, stats] = await Promise.all([listJobs(query), getJobStats()]);
+  const [jobs, stats] = await Promise.all([
+    listJobsForTelegramUser(query, session?.id),
+    getJobStatsForTelegramUser(session?.id)
+  ]);
 
   return (
     <main className="shell">
@@ -26,14 +31,26 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         <div className="brand">
           <h1>Job Scraper</h1>
         </div>
-        <a
-          className="button primary"
-          href="/api/jobs"
-          title="Open REST API jobs endpoint"
-        >
-          <BriefcaseBusiness size={18} />
-          API
-        </a>
+        <div className="topbar-actions">
+          {session ? (
+            <span className="session-pill">
+              {session.username ? "@" + session.username : session.firstName ?? "Telegram user"}
+            </span>
+          ) : null}
+          <a
+            className="button primary"
+            href="/api/jobs"
+            title="Open REST API jobs endpoint"
+          >
+            <BriefcaseBusiness size={18} />
+            API
+          </a>
+          {session ? (
+            <form action="/api/auth/logout" method="post">
+              <button className="button" type="submit">Logout</button>
+            </form>
+          ) : null}
+        </div>
       </header>
 
       <section className="stats" aria-label="Job statistics">

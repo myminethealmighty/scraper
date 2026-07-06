@@ -101,26 +101,35 @@ export function createNotifier(config: AppConfig): Notifier {
 
 function formatJobs(jobs: NotificationJob[], timeZone: string): string {
   const scrapeTime = formatScrapeTime(new Date(), timeZone);
-  const lines = jobs.slice(0, 10).map((job) => {
-    const title = compactLine(job.title);
-    const company = compactLine(job.company) || "Unknown";
-    const location = compactLine(job.location) || "Unknown";
-    const salary = compactLine(job.salary) || "Salary not listed";
-    const techStack = formatTechStack(job.technologies);
-
-    return [
-      `${title} (${job.source})`,
-      `${company} - ${location}`,
-      salary,
-      "",
-      techStack,
-      "",
-      job.applyUrl
-    ].join("\n");
-  });
+  const lines = jobs.slice(0, 10).map(formatJob);
 
   const suffix = jobs.length > 10 ? `\n\nAnd ${jobs.length - 10} more new jobs.` : "";
-  return `New matching jobs found\nScrape time: ${scrapeTime}\n\n${lines.join("\n\n")}${suffix}`;
+  return `New matching jobs found\nScrape time: ${scrapeTime}\n\n${lines.join("\n\n---\n\n")}${suffix}`;
+}
+
+function formatJob(job: NotificationJob): string {
+  const title = compactLine(job.title) || "Untitled job";
+  const source = compactLine(job.source);
+  const company = optionalLine(job.company);
+  const location = optionalLine(job.location);
+  const salary = optionalLine(job.salary);
+  const techStack = formatTechStack(job.technologies);
+  const companyLocation = formatCompanyLocation(company, location);
+
+  return [
+    source ? `${title} (${source})` : title,
+    companyLocation,
+    salary,
+    techStack,
+    job.applyUrl
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatCompanyLocation(company: string, location: string): string {
+  if (company && location) return `${company} - ${location}`;
+  return company || location;
 }
 
 function formatScrapeTime(date: Date, timeZone: string): string {
@@ -136,9 +145,16 @@ function formatScrapeTime(date: Date, timeZone: string): string {
 }
 
 function formatTechStack(technologies: string[] | undefined): string {
-  if (!technologies || technologies.length === 0) return "Tech stack not listed";
+  if (!technologies || technologies.length === 0) return "";
 
-  return Array.from(new Set(technologies.map(compactLine).filter(Boolean))).slice(0, 12).join(" ");
+  return Array.from(new Set(technologies.map(optionalLine).filter(Boolean))).slice(0, 12).join(" ");
+}
+
+function optionalLine(value: string | null | undefined): string {
+  const line = compactLine(value);
+  if (!line) return "";
+  if (/^(unknown|n\/?a|none|null|salary not listed|tech stack not listed)$/i.test(line)) return "";
+  return line;
 }
 
 function compactLine(value: string | null | undefined): string {

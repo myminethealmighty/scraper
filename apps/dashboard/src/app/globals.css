@@ -88,13 +88,21 @@ select {
 
 .filters {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) repeat(8, minmax(118px, 0.65fr)) auto;
+  grid-template-columns: minmax(260px, 1.4fr) minmax(150px, 0.75fr) minmax(150px, 0.75fr) minmax(145px, 0.65fr) minmax(145px, 0.65fr) 88px auto;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
   margin-bottom: 16px;
+}
+
+.compact-filters .search-input {
+  min-width: 0;
+}
+
+.compact-filters .page-size {
+  min-width: 74px;
 }
 
 .input,

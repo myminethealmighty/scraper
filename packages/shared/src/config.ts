@@ -1,22 +1,6 @@
 import { z } from "zod";
 import { loadEnvFromNearestFile } from "./env.js";
 
-export const defaultKeywords = [
-  "React",
-  "Next.js",
-  "Laravel",
-  "PHP",
-  "TypeScript",
-  "Node.js",
-  "Frontend",
-  "Front End",
-  "Backend",
-  "Back End",
-  "Full Stack",
-  "Software Developer",
-  "Software Engineer",
-];
-
 const boolish = z
   .string()
   .optional()
@@ -34,15 +18,6 @@ const optionalUrl = z.preprocess(
 
 export const appConfigSchema = z.object({
   DATABASE_URL: z.string().url(),
-  SCRAPER_KEYWORDS: z
-    .string()
-    .default(defaultKeywords.join(","))
-    .transform((value) =>
-      value
-        .split(",")
-        .map((keyword) => keyword.trim())
-        .filter(Boolean),
-    ),
   SCRAPER_CRON: z.string().default("0 12 * * *"),
   SCRAPER_TIME_ZONE: z.string().default("Asia/Yangon"),
   SCRAPER_CONCURRENCY: z.coerce.number().int().positive().default(2),

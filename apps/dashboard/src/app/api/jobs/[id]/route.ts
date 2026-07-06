@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireApiAuth } from "../../../auth";
 import { getJob, updateJob } from "@job-scraper/database";
 import { updateJobSchema } from "@job-scraper/shared";
 
@@ -7,6 +8,8 @@ type RouteContext = {
 };
 
 export async function GET(_: Request, context: RouteContext) {
+  const unauthorized = await requireApiAuth();
+  if (unauthorized) return unauthorized;
   const { id } = await context.params;
   const job = await getJob(id);
 
@@ -18,6 +21,8 @@ export async function GET(_: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
+  const unauthorized = await requireApiAuth();
+  if (unauthorized) return unauthorized;
   const { id } = await context.params;
   const input = updateJobSchema.parse(await request.json());
   const job = await updateJob(id, input);

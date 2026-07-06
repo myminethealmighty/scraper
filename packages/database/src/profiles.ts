@@ -27,13 +27,37 @@ export type GroupedScrapeTask = {
   profileIds: string[];
 };
 
+export type TelegramNotificationRecipient = {
+  userId: string;
+  chatId: string;
+  profileIds: string[];
+};
+
 export function normalizeSearchTerm(value: string): string {
-  return value
+  const cleaned = value
     .toLowerCase()
     .replace(/\.js\b/g, " js")
     .replace(/[^a-z0-9+#]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+  return normalizeKnownAlias(cleaned);
+}
+
+function normalizeKnownAlias(value: string): string {
+  const aliases = new Map<string, string>([
+    ["reactjs", "react"],
+    ["react js", "react"],
+    ["nextjs", "next js"],
+    ["nodejs", "node js"],
+    ["type script", "typescript"],
+    ["java script", "javascript"],
+    ["front end", "frontend"],
+    ["back end", "backend"],
+    ["fullstack", "full stack"]
+  ]);
+
+  return aliases.get(value) ?? value;
 }
 
 export async function upsertTelegramUser(input: TelegramUserInput) {
@@ -165,6 +189,36 @@ export async function listGroupedScrapeTasks(): Promise<GroupedScrapeTask[]> {
   }
 
   return Array.from(taskMap.values());
+}
+
+export async function listTelegramNotificationRecipients(profileIds: string[]): Promise<TelegramNotificationRecipient[]> {
+  if (profileIds.length === 0) return [];
+
+  const profiles = await getPrisma().searchProfile.findMany({
+    where: {
+      id: { in: Array.from(new Set(profileIds)) },
+      enabled: true,
+      user: { isActive: true }
+    },
+    include: { user: true }
+  });
+
+  const recipients = new Map<string, TelegramNotificationRecipient>();
+  for (const profile of profiles) {
+    const existing = recipients.get(profile.userId);
+    if (existing) {
+      existing.profileIds.push(profile.id);
+      continue;
+    }
+
+    recipients.set(profile.userId, {
+      userId: profile.userId,
+      chatId: profile.user.chatId,
+      profileIds: [profile.id]
+    });
+  }
+
+  return Array.from(recipients.values());
 }
 
 export async function recordNotificationLog(input: {

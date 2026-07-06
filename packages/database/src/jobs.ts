@@ -67,33 +67,39 @@ export async function upsertJobs(rawJobs: RawJob[]): Promise<UpsertJobsResult> {
 }
 
 export async function listJobs(query: JobQuery) {
+  return listJobsWithWhere(query, buildJobQueryWhere(query));
+}
+
+export async function listJobsForTelegramUser(query: JobQuery, telegramId: string | null | undefined) {
+  const where = await buildTelegramUserJobWhere(telegramId, query);
+  return listJobsWithWhere(query, where);
+}
+
+export async function getJob(id: string) {
+  const job = await getPrisma().job.findUnique({ where: { id } });
+  return job ? toJobRecord(job) : null;
+}
+
+export async function updateJob(id: string, input: UpdateJobInput) {
+  const job = await getPrisma().job.update({
+    where: { id },
+    data: input
+  });
+
+  return toJobRecord(job);
+}
+
+export async function getJobStats() {
+  return getJobStatsWithWhere({});
+}
+
+export async function getJobStatsForTelegramUser(telegramId: string | null | undefined) {
+  const where = await buildTelegramUserJobWhere(telegramId);
+  return getJobStatsWithWhere(where);
+}
+
+async function listJobsWithWhere(query: JobQuery, where: Prisma.JobWhereInput) {
   const prisma = getPrisma();
-  const where: Prisma.JobWhereInput = {};
-
-  if (query.q) {
-    where.OR = [
-      { title: { contains: query.q } },
-      { company: { contains: query.q } },
-      { location: { contains: query.q } },
-      { source: { contains: query.q } },
-      { salary: { contains: query.q } },
-      { employmentType: { contains: query.q } },
-      { description: { contains: query.q } }
-    ];
-  }
-
-  if (query.source) where.source = query.source;
-  if (query.workMode) where.workMode = query.workMode as WorkMode;
-  if (query.status) where.status = query.status as JobStatus;
-  if (typeof query.favorite === "boolean") where.favorite = query.favorite;
-  if (query.technology) where.technologies = { array_contains: query.technology };
-  if (query.postedFrom || query.postedTo) {
-    where.postedAt = {
-      ...(query.postedFrom ? { gte: new Date(`${query.postedFrom}T00:00:00.000Z`) } : {}),
-      ...(query.postedTo ? { lte: new Date(`${query.postedTo}T23:59:59.999Z`) } : {})
-    };
-  }
-
   const skip = (query.page - 1) * query.pageSize;
   const [items, total] = await prisma.$transaction([
     prisma.job.findMany({
@@ -114,44 +120,37 @@ export async function listJobs(query: JobQuery) {
   };
 }
 
-export async function getJob(id: string) {
-  const job = await getPrisma().job.findUnique({ where: { id } });
-  return job ? toJobRecord(job) : null;
-}
-
-export async function updateJob(id: string, input: UpdateJobInput) {
-  const job = await getPrisma().job.update({
-    where: { id },
-    data: input
-  });
-
-  return toJobRecord(job);
-}
-
-export async function getJobStats() {
+async function getJobStatsWithWhere(where: Prisma.JobWhereInput) {
   const prisma = getPrisma();
+  const recentWhere: Prisma.JobWhereInput = {
+    AND: [
+      where,
+      {
+        firstSeenAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
+        }
+      }
+    ]
+  };
+
   const [total, saved, applied, favorites, bySource, byWorkMode, recent] = await prisma.$transaction([
-    prisma.job.count(),
-    prisma.job.count({ where: { status: "SAVED" } }),
-    prisma.job.count({ where: { status: "APPLIED" } }),
-    prisma.job.count({ where: { favorite: true } }),
+    prisma.job.count({ where }),
+    prisma.job.count({ where: { AND: [where, { status: "SAVED" }] } }),
+    prisma.job.count({ where: { AND: [where, { status: "APPLIED" }] } }),
+    prisma.job.count({ where: { AND: [where, { favorite: true }] } }),
     prisma.job.groupBy({
       by: ["source"],
+      where,
       _count: { _all: true },
       orderBy: { source: "asc" }
     }),
     prisma.job.groupBy({
       by: ["workMode"],
+      where,
       _count: { _all: true },
       orderBy: { workMode: "asc" }
     }),
-    prisma.job.count({
-      where: {
-        firstSeenAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
-        }
-      }
-    })
+    prisma.job.count({ where: recentWhere })
   ]);
 
   return {
@@ -165,6 +164,85 @@ export async function getJobStats() {
       .sort((a, b) => b.count - a.count),
     byWorkMode: byWorkMode.map((mode) => ({ workMode: mode.workMode, count: groupCount(mode) }))
   };
+}
+
+function buildJobQueryWhere(query: JobQuery): Prisma.JobWhereInput {
+  const and: Prisma.JobWhereInput[] = [];
+
+  if (query.q) and.push({ OR: buildTextSearchWhere(query.q) });
+  if (query.source) and.push({ source: query.source });
+  if (query.workMode) and.push({ workMode: query.workMode as WorkMode });
+  if (query.status) and.push({ status: query.status as JobStatus });
+  if (typeof query.favorite === "boolean") and.push({ favorite: query.favorite });
+  if (query.technology) and.push({ technologies: { array_contains: query.technology } });
+  if (query.postedFrom || query.postedTo) {
+    and.push({
+      postedAt: {
+        ...(query.postedFrom ? { gte: new Date(query.postedFrom + "T00:00:00.000Z") } : {}),
+        ...(query.postedTo ? { lte: new Date(query.postedTo + "T23:59:59.999Z") } : {})
+      }
+    });
+  }
+
+  return and.length > 0 ? { AND: and } : {};
+}
+
+async function buildTelegramUserJobWhere(telegramId: string | null | undefined, query?: JobQuery): Promise<Prisma.JobWhereInput> {
+  const queryWhere = query ? buildJobQueryWhere(query) : {};
+  if (!telegramId) return queryWhere;
+
+  const profileWhere = await buildTelegramProfileWhere(telegramId);
+  return { AND: [profileWhere, queryWhere] };
+}
+
+async function buildTelegramProfileWhere(telegramId: string): Promise<Prisma.JobWhereInput> {
+  const user = await getPrisma().telegramUser.findUnique({
+    where: { chatId: telegramId },
+    include: {
+      profiles: {
+        where: { enabled: true },
+        include: {
+          sources: { where: { enabled: true } },
+          terms: true
+        }
+      }
+    }
+  });
+
+  if (!user) return impossibleWhere();
+
+  const sources = new Set<string>();
+  const terms = new Set<string>();
+
+  for (const profile of user.profiles) {
+    for (const source of profile.sources) sources.add(source.sourceName);
+    for (const term of profile.terms) terms.add(term.value);
+  }
+
+  if (sources.size === 0 || terms.size === 0) return impossibleWhere();
+
+  return {
+    AND: [
+      { source: { in: Array.from(sources) } },
+      { OR: Array.from(terms).flatMap(buildTextSearchWhere) }
+    ]
+  };
+}
+
+function buildTextSearchWhere(value: string): Prisma.JobWhereInput[] {
+  return [
+    { title: { contains: value } },
+    { company: { contains: value } },
+    { location: { contains: value } },
+    { source: { contains: value } },
+    { salary: { contains: value } },
+    { employmentType: { contains: value } },
+    { description: { contains: value } }
+  ];
+}
+
+function impossibleWhere(): Prisma.JobWhereInput {
+  return { id: "__no_matching_profile__" };
 }
 
 function groupCount(value: { _count?: true | { _all?: number } }): number {

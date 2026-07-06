@@ -17,6 +17,8 @@ COPY packages/scraper-core/package.json packages/scraper-core/package.json
 COPY packages/shared/package.json packages/shared/package.json
 RUN --mount=type=cache,target=/root/.npm \
   npm ci --ignore-scripts --prefer-offline --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=600000
+
+FROM deps AS browser-deps
 RUN npx playwright install --with-deps chromium
 
 FROM deps AS build
@@ -30,6 +32,7 @@ ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["npm", "run", "start", "-w", "apps/dashboard"]
 
-FROM build AS worker
+FROM browser-deps AS worker
 ENV NODE_ENV=production
+COPY --from=build /app /app
 CMD ["npm", "run", "start", "-w", "apps/worker"]

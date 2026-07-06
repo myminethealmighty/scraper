@@ -1,5 +1,4 @@
 import {
-  BriefcaseBusiness,
   ExternalLink,
   Filter,
   Heart,
@@ -40,14 +39,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               {session.username ? "@" + session.username : session.firstName ?? "Telegram user"}
             </span>
           ) : null}
-          <a
-            className="button primary"
-            href="/api/jobs"
-            title="Open REST API jobs endpoint"
-          >
-            <BriefcaseBusiness size={18} />
-            API
-          </a>
           {session ? (
             <form action="/api/auth/logout" method="post">
               <button className="button" type="submit">Logout</button>
@@ -64,46 +55,25 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         <Stat label="Favorites" value={stats.favorites} />
       </section>
 
-      <form className="filters">
+      <form className="filters compact-filters">
         <input
-          className="input"
+          className="input search-input"
           name="q"
           defaultValue={query.q}
-          placeholder="Search title, company, source, salary, description"
+          placeholder="Search jobs"
         />
         <select
           className="select"
           name="source"
           defaultValue={query.source ?? ""}
+          aria-label="Source"
         >
-          <option value="">Any source</option>
+          <option value="">Source</option>
           {stats.bySource.map((source) => (
             <option value={source.source} key={source.source}>
               {source.source}
             </option>
           ))}
-        </select>
-        <select
-          className="select"
-          name="workMode"
-          defaultValue={query.workMode ?? ""}
-        >
-          <option value="">Any mode</option>
-          <option value="REMOTE">Remote</option>
-          <option value="HYBRID">Hybrid</option>
-          <option value="ONSITE">Onsite</option>
-          <option value="UNKNOWN">Unknown</option>
-        </select>
-        <select
-          className="select"
-          name="status"
-          defaultValue={query.status ?? ""}
-        >
-          <option value="">Any status</option>
-          <option value="NEW">New</option>
-          <option value="SAVED">Saved</option>
-          <option value="APPLIED">Applied</option>
-          <option value="ARCHIVED">Archived</option>
         </select>
         <input
           className="input"
@@ -111,15 +81,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           defaultValue={query.technology}
           placeholder="Technology"
         />
-        <select
-          className="select"
-          name="favorite"
-          defaultValue={String(query.favorite ?? "")}
-        >
-          <option value="">All jobs</option>
-          <option value="true">Favorites</option>
-          <option value="false">Not favorites</option>
-        </select>
         <input
           className="input"
           name="postedFrom"
@@ -135,9 +96,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           title="Posted to"
         />
         <select
-          className="select"
+          className="select page-size"
           name="pageSize"
           defaultValue={String(query.pageSize)}
+          aria-label="Jobs per page"
         >
           <option value="10">10</option>
           <option value="25">25</option>
@@ -166,11 +128,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                     <span className="source-badge">{job.source}</span>
                   </h2>
                   <div className="job-lines">
-                    <div>{job.company}</div>
-                    <div>{job.location}</div>
+                    {displayOptional(job.company) ? <div>{displayOptional(job.company)}</div> : null}
+                    {displayOptional(job.location) ? <div>{displayOptional(job.location)}</div> : null}
                     <div className="detail-row">
-                      <span>{job.workMode}</span>
-                      {job.salary ? <span>{job.salary}</span> : null}
+                      {job.workMode !== "UNKNOWN" ? <span>{job.workMode}</span> : null}
+                      {displayOptional(job.salary) ? <span>{displayOptional(job.salary)}</span> : null}
                       {job.postedAt ? (
                         <span className="posted-date">
                           <CalendarDays size={14} /> {formatDate(job.postedAt)}
@@ -182,9 +144,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                     </div>
                   </div>
                   <div className="badge-row">
-                    {job.technologies.length === 0 ? (
-                      <span className="badge muted">Tech stack not listed</span>
-                    ) : null}
                     {job.technologies.slice(0, 10).map((technology) => (
                       <a
                         className="badge"
@@ -394,6 +353,13 @@ function formatDate(value: Date | string) {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function displayOptional(value: string | null) {
+  const text = cleanDisplayText(value);
+  if (!text) return "";
+  if (/^(unknown|n\/?a|none|null|salary not listed|tech stack not listed)$/i.test(text)) return "";
+  return text;
 }
 
 function cleanDisplayText(value: string | null) {

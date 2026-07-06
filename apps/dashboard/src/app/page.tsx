@@ -7,10 +7,13 @@ import {
   Search,
   Star,
 } from "lucide-react";
+
 import { getJobStatsForTelegramUser, listJobsForTelegramUser } from "@job-scraper/database";
 import { jobQuerySchema, type JobQuery } from "@job-scraper/shared";
 import { updateJobAction } from "./actions";
 import { requireDashboardAuth } from "./auth";
+
+export const dynamic = "force-dynamic";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

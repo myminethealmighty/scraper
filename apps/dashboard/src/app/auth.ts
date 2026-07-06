@@ -38,10 +38,14 @@ export async function getDashboardSession(): Promise<TelegramDashboardSession | 
   if (!isDashboardAuthEnabled()) return null;
 
   const cookieStore = await cookies();
-  const value = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!value) return null;
+  const sessionCookies = cookieStore.getAll(SESSION_COOKIE);
 
-  return verifySessionCookie(value);
+  for (const sessionCookie of sessionCookies) {
+    const session = verifySessionCookie(sessionCookie.value);
+    if (session) return session;
+  }
+
+  return null;
 }
 
 export async function requireDashboardAuth(): Promise<TelegramDashboardSession | null> {

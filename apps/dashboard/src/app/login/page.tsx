@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
+
 import { getDashboardSession, getTelegramBotUsername, isDashboardAuthEnabled } from "../auth";
 import { TelegramLoginButton } from "../components/TelegramLoginButton";
+
+export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
   if (!isDashboardAuthEnabled()) redirect("/");

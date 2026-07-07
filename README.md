@@ -15,7 +15,7 @@ Job Scraper is actively evolving. The current version supports manual and schedu
 ## What It Does
 
 - Scrapes supported job portals through adapter classes.
-- Uses direct APIs where available, Cheerio for static HTML, and Playwright for dynamic pages.
+- Uses direct APIs where available, [Cheerio](https://cheerio.js.org/) for static HTML, and [Playwright](https://playwright.dev/) for dynamic pages.
 - Stores normalized jobs in MySQL through Prisma.
 - Deduplicates jobs by apply URL first, then by company/title/location fingerprint.
 - Tracks scrape runs, created jobs, updated jobs, failures, and source history.
@@ -59,17 +59,17 @@ packages/
 
 Supported sources are defined in [packages/scraper-core/src/sources.ts](packages/scraper-core/src/sources.ts). Users should choose from these supported source keys instead of entering arbitrary URLs.
 
-| Key | Source | Method |
-| --- | --- | --- |
-| `remotive` | Remotive | API |
-| `jobspace_mm` | JobSpace Myanmar | Playwright |
-| `jobnet_mm` | JobNet Myanmar | Cheerio |
-| `alote_mm` | Alote Myanmar | Cheerio |
-| `linkedin` | LinkedIn | Playwright |
-| `jobsdb_th` | JobsDB Thailand | Playwright |
-| `jobsdb_sg` | JobsDB Singapore | Playwright |
-| `remote_ok` | Remote OK | Cheerio/API-style JSON page |
-| `we_work_remotely` | We Work Remotely | Playwright |
+| Key                | Source           | Method                      |
+| ------------------ | ---------------- | --------------------------- |
+| `remotive`         | Remotive         | API                         |
+| `jobspace_mm`      | JobSpace Myanmar | Playwright                  |
+| `jobnet_mm`        | JobNet Myanmar   | Cheerio                     |
+| `alote_mm`         | Alote Myanmar    | Cheerio                     |
+| `linkedin`         | LinkedIn         | Playwright                  |
+| `jobsdb_th`        | JobsDB Thailand  | Playwright                  |
+| `jobsdb_sg`        | JobsDB Singapore | Playwright                  |
+| `remote_ok`        | Remote OK        | Cheerio/API-style JSON page |
+| `we_work_remotely` | We Work Remotely | Playwright                  |
 
 This keeps scraping safer and more reliable than accepting random URLs. If arbitrary URLs are added later, they should be mapped to known adapters and checked against SSRF protections before any request is made.
 
@@ -101,8 +101,6 @@ DATABASE_URL="mysql://root@127.0.0.1:3306/job_scraper"
 ```
 
 Search terms are not configured through `.env`. Users add terms through the Telegram bot, and the scraper reads them from the `SearchTerm` table.
-
-`TELEGRAM_CHAT_ID` is intentionally not part of the new env file. Telegram recipients should come from bot subscriptions saved in the database, not from one hardcoded global chat ID.
 
 ## Local Setup
 
@@ -245,7 +243,7 @@ NOTIFIER_PROVIDER="discord"
 DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 ```
 
-Telegram uses `TELEGRAM_BOT_TOKEN` for bot/profile subscriptions. The dashboard login widget also needs `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` without `@`. Global `TELEGRAM_CHAT_ID` delivery was removed so recipients can be stored per user.
+Telegram uses `TELEGRAM_BOT_TOKEN` for bot/profile subscriptions. The dashboard login widget also needs `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` without `@`.
 
 Telegram bot subscription flow:
 

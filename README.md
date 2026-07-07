@@ -1,10 +1,10 @@
 # Job Scraper
 
-[![Deploy](https://github.com/myminethealmighty/scrapper/actions/workflows/deploy.yml/badge.svg)](https://github.com/myminethealmighty/scrapper/actions/workflows/deploy.yml)
+[![Deploy](https://github.com/myminethealmighty/scraper/actions/workflows/deploy.yml/badge.svg)](https://github.com/myminethealmighty/scraper/actions/workflows/deploy.yml)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Visitors](https://visitor-badge.laobi.icu/badge?page_id=myminethealmighty.scrapper)
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=myminethealmighty.scraper)
 
 A production-minded TypeScript monorepo for scraping supported job portals, storing normalized jobs in MySQL, deduplicating results, sending profile-based notifications, and viewing matches through a Next.js dashboard. The project is designed around source adapters, Prisma repositories, scheduled workers, and database-driven search profiles.
 

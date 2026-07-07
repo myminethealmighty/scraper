@@ -19,3 +19,6 @@ This project does not follow a formal release cycle yet.
 - Added profile-based Telegram notifications with batching and duplicate-delivery protection.
 - Removed the global `SCRAPER_KEYWORDS` env search flow; search terms now come from saved user profiles.
 - Added search-term normalization for casing, punctuation, and common aliases such as `ReactJS` to `react`.
+- Added privacy-first resume parsing and rule-based job scoring for dashboard and Telegram users.
+- Added compact dashboard resume score sorting that appears only after a resume profile exists, with stable Search button text during loading.
+- Added scrape health tracking, failure cooldowns, separate scrape/score/cleanup schedules, and 92-day cleanup for stale jobs and scrape-run history.

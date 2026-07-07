@@ -34,7 +34,16 @@ export function isDashboardAuthEnabled(): boolean {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN);
 }
 
+export function isTemporaryDashboardBypassEnabled(): boolean {
+  return process.env.NODE_ENV !== "production";
+}
+
 export function getDashboardTelegramId(session: TelegramDashboardSession | null): string | undefined {
+  if (isTemporaryDashboardBypassEnabled() && session?.id === "local-dev") return undefined;
+  return session?.id;
+}
+
+export function getDashboardResumeTelegramId(session: TelegramDashboardSession | null): string | undefined {
   return session?.id;
 }
 
@@ -53,6 +62,16 @@ export async function getDashboardSession(): Promise<TelegramDashboardSession | 
 }
 
 export async function requireDashboardAuth(): Promise<TelegramDashboardSession | null> {
+  // TEMPORARY local-only bypass for PDF resume upload testing. Remove after local testing.
+  if (isTemporaryDashboardBypassEnabled()) {
+    return {
+      id: "local-dev",
+      username: "local-dev",
+      firstName: "Local",
+      authDate: Math.floor(Date.now() / 1000)
+    };
+  }
+
   if (!isDashboardAuthEnabled()) return null;
 
   const session = await getDashboardSession();
@@ -62,6 +81,9 @@ export async function requireDashboardAuth(): Promise<TelegramDashboardSession |
 }
 
 export async function requireApiAuth(): Promise<Response | null> {
+  // TEMPORARY local-only bypass for PDF resume upload testing. Remove after local testing.
+  if (isTemporaryDashboardBypassEnabled()) return null;
+
   if (!isDashboardAuthEnabled()) return null;
 
   const session = await getDashboardSession();

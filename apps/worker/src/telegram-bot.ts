@@ -1,12 +1,17 @@
 import {
   ensureSearchProfile,
   getPrisma,
+  scoreJobsForTelegramChat,
   setProfileSources,
   setProfileTerms,
+  upsertResumeProfileForTelegramChat,
   upsertTelegramUser,
 } from "@job-scraper/database";
 import { getSupportedJobSources } from "@job-scraper/scraper-core";
 import { type AppConfig, logger } from "@job-scraper/shared";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 type TelegramUpdate = {
   update_id: number;
@@ -27,8 +32,16 @@ type TelegramCallbackQuery = {
 type TelegramMessage = {
   message_id: number;
   text?: string;
+  document?: TelegramDocument;
   from?: TelegramUserPayload;
   chat: TelegramChat;
+};
+
+type TelegramDocument = {
+  file_id: string;
+  file_name?: string;
+  mime_type?: string;
+  file_size?: number;
 };
 
 type TelegramUserPayload = {
@@ -53,6 +66,13 @@ type TelegramApiResponse<T> = {
   description?: string;
 };
 
+type TelegramFile = {
+  file_id: string;
+  file_unique_id: string;
+  file_size?: number;
+  file_path?: string;
+};
+
 type InlineKeyboardMarkup = {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
 };
@@ -70,8 +90,6 @@ type TelegramReplyMarkup = InlineKeyboardMarkup | ReplyKeyboardMarkup;
 const SOURCE_DONE = "sources:done";
 const SOURCE_ALL = "sources:all";
 const SOURCE_CLEAR = "sources:clear";
-const TERMS_UPDATE = "terms:update";
-const TERMS_KEEP = "terms:keep";
 
 export function startTelegramBot(config: AppConfig) {
   if (!config.TELEGRAM_BOT_TOKEN) {
@@ -90,6 +108,7 @@ class TelegramBotPoller {
   private offset = 0;
   private stopped = false;
   private readonly awaitingTerms = new Set<number>();
+  private readonly awaitingResume = new Set<number>();
 
   constructor(private readonly token: string) {}
 
@@ -148,7 +167,14 @@ class TelegramBotPoller {
     }
 
     const message = update.message;
-    if (!message?.text) return;
+    if (!message) return;
+
+    if (message.document) {
+      await this.handleDocumentMessage(message);
+      return;
+    }
+
+    if (!message.text) return;
 
     const text = message.text.trim();
     if (text === "/start" || text.startsWith("/start ")) {
@@ -172,11 +198,71 @@ class TelegramBotPoller {
       return;
     }
 
+    if (text === "📄 Resume" || text === "/resume") {
+      await this.askForResume(message.chat.id);
+      return;
+    }
+
+    if (text === "Update" || text === "✏️ Update terms") {
+      const profile = await this.upsertUserAndProfile(message.chat, message.from);
+      this.awaitingResume.delete(message.chat.id);
+      this.awaitingTerms.add(message.chat.id);
+      await this.sendMessage(
+        message.chat.id,
+        [
+          "Send roles, skills, or keywords separated by commas.",
+          "",
+          "Example:",
+          "Frontend, Backend, Laravel, Sales, Driver",
+        ].join("\n"),
+        this.buildReplyKeyboard("terms"),
+      );
+      return;
+    }
+
+    if (text === "Leave current" || text === "✅ Leave current") {
+      this.awaitingTerms.delete(message.chat.id);
+      this.awaitingResume.delete(message.chat.id);
+      await this.sendMessage(
+        message.chat.id,
+        "Current search terms kept.",
+        this.buildMainKeyboard(),
+      );
+      return;
+    }
+
+    if (text === "Update resume" || text === "📎 Upload resume") {
+      this.awaitingTerms.delete(message.chat.id);
+      this.awaitingResume.add(message.chat.id);
+      await this.sendMessage(
+        message.chat.id,
+        [
+          "Upload your resume as a PDF file.",
+          "",
+          "How your data is stored:",
+          "- The uploaded PDF file is not stored.",
+          "- Raw resume text is extracted only for processing and is not stored.",
+          "- Only detected skills, roles, locations, and matching keywords are saved for job matching.",
+        ].join("\n"),
+        this.buildReplyKeyboard("resume"),
+      );
+      return;
+    }
+
     if (text.startsWith("/")) {
       await this.sendMessage(
         message.chat.id,
         "Use /start to configure your job alerts.",
-        this.buildReplyKeyboard("root"),
+        this.buildMainKeyboard(),
+      );
+      return;
+    }
+
+    if (this.awaitingResume.has(message.chat.id)) {
+      await this.sendMessage(
+        message.chat.id,
+        "Please upload your resume as a PDF file. Pasted resume text is not accepted here.",
+        this.buildReplyKeyboard("resume"),
       );
       return;
     }
@@ -188,14 +274,15 @@ class TelegramBotPoller {
 
     await this.sendMessage(
       message.chat.id,
-      "Choose Terms first, then send your search terms.",
-      this.buildReplyKeyboard("root"),
+      "Please choose an action from the keyboard buttons.",
+      this.buildMainKeyboard(),
     );
   }
 
   private async handleStart(message: TelegramMessage) {
     const profile = await this.upsertUserAndProfile(message.chat, message.from);
     this.awaitingTerms.delete(message.chat.id);
+    this.awaitingResume.delete(message.chat.id);
 
     logger.info(
       { chatId: message.chat.id, profileId: profile.id },
@@ -208,7 +295,7 @@ class TelegramBotPoller {
         "",
         "Use the menu below to update sources or search terms."
       ].join("\n"),
-      this.buildReplyKeyboard("root"),
+      this.buildMainKeyboard(),
     );
     await this.sendSourceKeyboard(
       message.chat.id,
@@ -267,33 +354,6 @@ class TelegramBotPoller {
       return;
     }
 
-    if (data === TERMS_UPDATE) {
-      this.awaitingTerms.add(chat.id);
-      await this.answerCallback(callback.id, "Send your search terms");
-      await this.sendMessage(
-        chat.id,
-        [
-          "Send roles, skills, or keywords separated by commas.",
-          "",
-          "Example:",
-          "Frontend, Backend, Laravel, Sales, Driver",
-        ].join("\n"),
-        this.buildReplyKeyboard("terms"),
-      );
-      return;
-    }
-
-    if (data === TERMS_KEEP) {
-      this.awaitingTerms.delete(chat.id);
-      await this.answerCallback(callback.id, "Current terms kept");
-      await this.sendMessage(
-        chat.id,
-        "Current search terms kept.",
-        this.buildReplyKeyboard("root"),
-      );
-      return;
-    }
-
     if (data.startsWith("source:")) {
       const sourceKey = data.slice("source:".length);
       const source = getSupportedJobSources().find(
@@ -317,16 +377,18 @@ class TelegramBotPoller {
   private async handleHome(message: TelegramMessage) {
     await this.upsertUserAndProfile(message.chat, message.from);
     this.awaitingTerms.delete(message.chat.id);
+    this.awaitingResume.delete(message.chat.id);
     await this.sendMessage(
       message.chat.id,
       "Choose an action from the menu below.",
-      this.buildReplyKeyboard("root"),
+      this.buildMainKeyboard(),
     );
   }
 
   private async showSourcesForMessage(message: TelegramMessage) {
     const profile = await this.upsertUserAndProfile(message.chat, message.from);
     this.awaitingTerms.delete(message.chat.id);
+    this.awaitingResume.delete(message.chat.id);
     await this.sendSourceKeyboard(
       message.chat.id,
       profile.id,
@@ -367,13 +429,91 @@ class TelegramBotPoller {
         "",
         "Use /sources to change portals or /terms to replace search terms.",
       ].join("\n"),
-      this.buildReplyKeyboard("root"),
+      this.buildMainKeyboard(),
     );
     this.awaitingTerms.delete(message.chat.id);
   }
 
+  private async handleDocumentMessage(message: TelegramMessage) {
+    if (!this.awaitingResume.has(message.chat.id)) {
+      await this.sendMessage(
+        message.chat.id,
+        "Choose Resume first, then upload your resume PDF.",
+        this.buildMainKeyboard(),
+      );
+      return;
+    }
+
+    const document = message.document;
+    if (!document) return;
+
+    const fileName = document.file_name ?? "";
+    const isPdf = document.mime_type === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      await this.sendMessage(
+        message.chat.id,
+        "Please upload a PDF resume file.",
+        this.buildReplyKeyboard("resume"),
+      );
+      return;
+    }
+
+    await this.sendMessage(
+      message.chat.id,
+      "Reading your PDF resume...",
+      this.buildReplyKeyboard("resume"),
+    );
+
+    try {
+      const buffer = await this.downloadTelegramFile(document.file_id);
+      const text = await extractPdfText(buffer);
+
+      if (text.trim().length < 20) {
+        await this.sendMessage(
+          message.chat.id,
+          "I could not extract enough text from this PDF. Please upload a text-based PDF resume.",
+          this.buildReplyKeyboard("resume"),
+        );
+        return;
+      }
+
+      await this.saveResumeFromText(message, text);
+    } catch (error) {
+      logger.error({ error, chatId: message.chat.id }, "Telegram resume PDF processing failed");
+      await this.sendMessage(
+        message.chat.id,
+        "Resume upload failed. Please try a text-based PDF file.",
+        this.buildReplyKeyboard("resume"),
+      );
+    }
+  }
+
+  private async saveResumeFromText(message: TelegramMessage, text: string) {
+    await this.upsertUserAndProfile(message.chat, message.from);
+    const { parsed } = await upsertResumeProfileForTelegramChat(String(message.chat.id), text);
+    const scores = await scoreJobsForTelegramChat(String(message.chat.id));
+    const scoredJobs = scores.filter((score) => score.score > 0).length;
+
+    await this.sendMessage(
+      message.chat.id,
+      [
+        "Resume profile updated.",
+        "",
+        "Storage: your PDF file and raw resume text were not stored.",
+        "Saved for matching: detected skills, roles, locations, and keywords.",
+        "Skills: " + (parsed.skills.join(", ") || "None detected"),
+        "Roles: " + (parsed.roles.join(", ") || "None detected"),
+        "Locations: " + (parsed.locations.join(", ") || "None detected"),
+        "Matched jobs: " + scoredJobs,
+      ].join("\n"),
+      this.buildMainKeyboard(),
+    );
+    this.awaitingResume.delete(message.chat.id);
+  }
+
   private async askForTerms(chatId: number, profileId: string) {
     this.awaitingTerms.delete(chatId);
+    this.awaitingResume.delete(chatId);
     const existingTerms = await this.getProfileTerms(profileId);
     const currentText = existingTerms.length > 0
       ? ["", "Current terms:", existingTerms.join(", ")]
@@ -388,6 +528,25 @@ class TelegramBotPoller {
         "Choose whether to update them or leave them unchanged.",
       ].join("\n"),
       this.buildTermsKeyboard(),
+    );
+  }
+
+  private async askForResume(chatId: number) {
+    this.awaitingTerms.delete(chatId);
+    this.awaitingResume.add(chatId);
+    await this.sendMessage(
+      chatId,
+      [
+        "Resume matching",
+        "",
+        "Upload your resume as a PDF file.",
+        "",
+        "How your data is stored:",
+        "- The uploaded PDF file is not stored.",
+        "- Raw resume text is extracted only for processing and is not stored.",
+        "- Only detected skills, roles, locations, and matching keywords are saved for job matching.",
+      ].join("\n"),
+      this.buildReplyKeyboard("resume"),
     );
   }
 
@@ -474,6 +633,26 @@ class TelegramBotPoller {
     );
   }
 
+  private async downloadTelegramFile(fileId: string): Promise<Buffer> {
+    const fileResponse = await fetch(this.apiUrl("getFile"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ file_id: fileId }),
+    });
+    const filePayload = (await fileResponse.json()) as TelegramApiResponse<TelegramFile>;
+
+    if (!fileResponse.ok || !filePayload.ok || !filePayload.result?.file_path) {
+      throw new Error(filePayload.description ?? "Telegram getFile failed: " + fileResponse.status);
+    }
+
+    const downloadResponse = await fetch(this.fileUrl(filePayload.result.file_path));
+    if (!downloadResponse.ok) {
+      throw new Error("Telegram file download failed: " + downloadResponse.status);
+    }
+
+    return Buffer.from(await downloadResponse.arrayBuffer());
+  }
+
   private async buildSourceKeyboard(
     profileId: string,
   ): Promise<InlineKeyboardMarkup> {
@@ -497,29 +676,38 @@ class TelegramBotPoller {
     return { inline_keyboard: rows };
   }
 
-  private buildReplyKeyboard(mode: "root" | "back" | "terms"): ReplyKeyboardMarkup {
-    const keyboard = mode === "back"
-      ? [[{ text: "🌐 Sources" }, { text: "🔎 Terms" }], [{ text: "⬅️ Back" }, { text: "🏠 Home" }]]
-      : [[{ text: "🌐 Sources" }, { text: "🔎 Terms" }]];
+  private buildReplyKeyboard(mode: "root" | "terms" | "resume"): ReplyKeyboardMarkup {
+    const keyboard = mode === "terms"
+      ? [
+          [{ text: "✏️ Update terms" }, { text: "✅ Leave current" }],
+          [{ text: "🌐 Sources" }, { text: "📄 Resume" }],
+          [{ text: "🏠 Home" }],
+        ]
+      : mode === "resume"
+        ? [
+            [{ text: "🌐 Sources" }, { text: "🔎 Terms" }],
+            [{ text: "🏠 Home" }],
+          ]
+        : [
+            [{ text: "🌐 Sources" }, { text: "🔎 Terms" }],
+            [{ text: "📄 Resume" }, { text: "🏠 Home" }],
+          ];
 
     return {
       keyboard,
       resize_keyboard: true,
       one_time_keyboard: false,
       is_persistent: true,
-      input_field_placeholder: mode === "terms" ? "Type search terms" : "Choose an option"
+      input_field_placeholder: mode === "terms" ? "Type search terms" : "Choose an option",
     };
   }
 
-  private buildTermsKeyboard(): InlineKeyboardMarkup {
-    return {
-      inline_keyboard: [
-        [
-          { text: "Update", callback_data: TERMS_UPDATE },
-          { text: "Leave current", callback_data: TERMS_KEEP },
-        ],
-      ],
-    };
+  private buildMainKeyboard(): ReplyKeyboardMarkup {
+    return this.buildReplyKeyboard("root");
+  }
+
+  private buildTermsKeyboard(): ReplyKeyboardMarkup {
+    return this.buildReplyKeyboard("terms");
   }
 
   private async sendMessage(
@@ -608,6 +796,10 @@ class TelegramBotPoller {
   private apiUrl(method: string) {
     return "https://api.telegram.org/bot" + this.token + "/" + method;
   }
+
+  private fileUrl(filePath: string) {
+    return "https://api.telegram.org/file/bot" + this.token + "/" + filePath;
+  }
 }
 
 function parseTerms(text: string): string[] {
@@ -619,6 +811,64 @@ function parseTerms(text: string): string[] {
         .filter((term) => term.length > 0),
     ),
   ).slice(0, 25);
+}
+
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  const pdfjsPath = resolvePdfJsFile("pdf.mjs");
+  const workerPath = resolvePdfJsFile("pdf.worker.mjs");
+  const importExternalPdfJs = new Function("specifier", "return import(specifier)") as (
+    specifier: string,
+  ) => Promise<{
+    GlobalWorkerOptions: { workerSrc: string };
+    getDocument: (options: { data: Uint8Array }) => {
+      promise: Promise<{
+        numPages: number;
+        getPage: (pageNumber: number) => Promise<{
+          getTextContent: () => Promise<{ items: Array<{ str?: string }> }>;
+          cleanup: () => void;
+        }>;
+        destroy: () => Promise<void>;
+      }>;
+    };
+  }>;
+  const pdfjs = await importExternalPdfJs(pathToFileURL(pdfjsPath).href);
+
+  pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
+
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+  const document = await loadingTask.promise;
+  const pages: string[] = [];
+
+  try {
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((item) => item.str ?? "")
+        .filter(Boolean)
+        .join(" ");
+      pages.push(text);
+      page.cleanup();
+    }
+
+    return pages.join("\n\n");
+  } finally {
+    await document.destroy();
+  }
+}
+
+function resolvePdfJsFile(fileName: string): string {
+  const relativePath = join("node_modules", "pdfjs-dist", "legacy", "build", fileName);
+  const candidates = [
+    join(process.cwd(), relativePath),
+    join(process.cwd(), "..", relativePath),
+    join(process.cwd(), "..", "..", relativePath),
+    join(process.cwd(), "..", "..", "..", relativePath),
+  ];
+
+  const match = candidates.find((candidate) => existsSync(candidate));
+  if (!match) throw new Error("PDF parser files are not installed. Run npm install and restart the worker.");
+  return match;
 }
 
 function sleep(ms: number) {

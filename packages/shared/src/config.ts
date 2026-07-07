@@ -19,9 +19,12 @@ const optionalUrl = z.preprocess(
 export const appConfigSchema = z.object({
   DATABASE_URL: z.string().url(),
   SCRAPER_CRON: z.string().default("0 12 * * *"),
+  SCORE_CRON: z.string().default("15 12 * * *"),
+  CLEANUP_CRON: z.string().default("30 11 * * *"),
   SCRAPER_TIME_ZONE: z.string().default("Asia/Yangon"),
   SCRAPER_CONCURRENCY: z.coerce.number().int().positive().default(2),
   SCRAPER_RATE_LIMIT_MS: z.coerce.number().int().nonnegative().default(1200),
+  SCRAPER_FAILURE_COOLDOWN_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
   SCRAPER_HEADLESS: boolish.default("true"),
   SCRAPER_MAX_RETRIES: z.coerce.number().int().nonnegative().default(3),
   SCRAPER_MAX_JOB_AGE_DAYS: z.coerce.number().int().positive().default(92),

@@ -15,6 +15,7 @@
     "@job-scraper/scraper-core": "*",
     "@job-scraper/shared": "*",
     "node-cron": "^4.5.0",
+    "pdf-parse": "^2.4.5",
     "tsx": "^4.19.2"
   },
   "devDependencies": {

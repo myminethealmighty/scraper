@@ -19,8 +19,11 @@ Job Scraper is actively evolving. The current version supports manual and schedu
 - Stores normalized jobs in MySQL through Prisma.
 - Deduplicates jobs by apply URL first, then by company/title/location fingerprint.
 - Tracks scrape runs, created jobs, updated jobs, failures, and source history.
-- Supports dashboard search, filters, details, saved/applied/favorite state, and statistics.
-- Runs manually from the CLI or automatically through a scheduled worker.
+- Tracks scrape health per source and cools down repeatedly failing scrapers.
+- Extracts resume skills, roles, and locations without storing raw resume text or uploaded files.
+- Scores jobs against the extracted resume profile with rule-based matching, no AI required.
+- Supports dashboard search, filters, resume match sorting, details, saved/applied/favorite state, and statistics.
+- Runs scraping, resume scoring, and cleanup as separate scheduled worker jobs.
 - Sends profile-based Telegram notifications in batches and keeps notification history in MySQL.
 
 ## Architecture
@@ -47,8 +50,10 @@ packages/
 4. Each adapter searches one source/term group and returns `RawJob[]` records.
 5. Zod validates each raw job before persistence.
 6. The database package cleans text, infers work mode where possible, deduplicates, and upserts jobs.
-7. The orchestrator records scrape status in `ScrapeRun`, sends new-job batches to matching Telegram users, and writes `NotificationLog` rows to avoid duplicate delivery.
-8. The dashboard reads the signed-in Telegram user's matching jobs and stats from MySQL.
+7. The orchestrator records scrape status in `ScrapeRun`, updates `ScrapeHealth`, sends new-job batches to matching Telegram users, and writes `NotificationLog` rows to avoid duplicate delivery.
+8. Resume matching stores only extracted skills, roles, and locations in `ResumeProfile`; raw resume text and uploaded files are not stored.
+9. The score scheduler writes rule-based `JobScore` rows so the dashboard can show match percentages.
+10. The dashboard reads the signed-in Telegram user's matching jobs and stats from MySQL.
 
 ## Supported Sources
 
@@ -81,6 +86,8 @@ Minimum local config:
 ```env
 DATABASE_URL="mysql://root:password@127.0.0.1:3306/job_scraper"
 SCRAPER_CRON="0 12 * * *"
+SCORE_CRON="15 12 * * *"
+CLEANUP_CRON="30 11 * * *"
 SCRAPER_TIME_ZONE="Asia/Yangon"
 SCRAPER_MAX_JOB_AGE_DAYS="92"
 NOTIFIER_PROVIDER="none"
@@ -131,6 +138,12 @@ Start the scheduled worker in another terminal:
 ```bash
 npm run dev:worker
 ```
+
+## Dashboard
+
+The dashboard starts with general job search, source/work-mode filters, status actions, favorites, pagination, and job details. The Search button keeps the same label while requests are running so the toolbar does not shift during filter changes.
+
+Resume matching is available from the `Resume Match` button. After a user uploads a resume and the app stores the extracted profile, the dashboard shows compact `High` and `Low` score-sort buttons with icons. Those score-sort controls are hidden until a resume profile exists, because match scores are only meaningful after resume extraction.
 
 ## Docker
 
@@ -183,6 +196,24 @@ Avoid broad Docker cleanup commands on a shared server unless you have checked o
 
 `ScrapeRun` is the scraper audit log. Each run records the source name, status, start time, finish time, jobs found, jobs created, jobs updated, and error text when a scraper fails. It is useful for checking whether a scheduled run actually happened and which adapter failed.
 
+### ScrapeHealth Table
+
+`ScrapeHealth` stores per-source health: last attempt, last success, consecutive failures, cooldown time, and latest error. After repeated failures, a source is temporarily skipped instead of being hit again immediately.
+
+### ResumeProfile And JobScore
+
+Resume matching is privacy-first. Dashboard and Telegram resume updates extract skills, roles, locations, and keywords, then discard the raw text. Dashboard PDF uploads are parsed in memory and are not stored as files. The app stores only extracted structured data in `ResumeProfile` and rule-based match results in `JobScore`.
+
+No AI is used for resume parsing or scoring right now.
+
+### Scheduled Jobs
+
+The worker runs separate schedules:
+
+- `SCRAPER_CRON`: scrape profile-based jobs.
+- `SCORE_CRON`: refresh resume-to-job scores.
+- `CLEANUP_CRON`: delete jobs and scrape-run history older than `SCRAPER_MAX_JOB_AGE_DAYS`. The default cleanup time is daily at 11:30 AM in `SCRAPER_TIME_ZONE`.
+
 ### Normalized Search Fields
 
 - `SearchTerm.normalizedValue` is used now. It stores a cleaned lowercase canonical value of user terms so profile scrape tasks can be grouped by source + normalized term. For example, punctuation and casing are removed before known aliases are collapsed.
@@ -225,8 +256,10 @@ User sends /start
 -> default SearchProfile is created
 -> supported source buttons are shown
 -> user selects portals and taps Done
--> user sends roles, skills, or keywords
+-> user chooses whether to update terms
+-> user sends roles, skills, or keywords only after tapping Update
 -> SearchSource and SearchTerm rows are saved
+-> optional Resume button extracts resume skills/roles/locations without storing raw resume text
 ```
 
 The worker container must be running for `/start` to be processed. If the bot token has been posted publicly, rotate it in BotFather and update `TELEGRAM_BOT_TOKEN` in production.

@@ -1,7 +1,11 @@
 import {
   finishScrapeRun,
+  getScrapeHealth,
   getPrisma,
   listTelegramNotificationRecipients,
+  markScrapeAttempt,
+  markScrapeFailure,
+  markScrapeSuccess,
   recordNotificationLog,
   startScrapeRun,
   upsertJobs
@@ -38,6 +42,12 @@ async function runPlannedProfileScrapes(plan: ProfileScrapePlanItem[], config: A
 
   for (const task of plan) {
     const sourceLog = log.child({ scraper: task.scraper.name, keyword: task.keyword, profiles: task.profileIds.length });
+    const health = await getScrapeHealth(task.scraper.name);
+    if (health?.cooldownUntil && health.cooldownUntil.getTime() > Date.now()) {
+      sourceLog.warn({ cooldownUntil: health.cooldownUntil }, "Skipping scraper because source is cooling down");
+      continue;
+    }
+
     const run = await startScrapeRun(task.scraper.name);
     const context: ScrapeContext = {
       keyword: task.keyword,
@@ -47,6 +57,7 @@ async function runPlannedProfileScrapes(plan: ProfileScrapePlanItem[], config: A
     };
 
     try {
+      await markScrapeAttempt(task.scraper.name);
       sourceLog.info("Starting profile scrape");
       const jobs = await retry(() => task.scraper.search(context), {
         retries: config.SCRAPER_MAX_RETRIES,
@@ -81,10 +92,12 @@ async function runPlannedProfileScrapes(plan: ProfileScrapePlanItem[], config: A
         jobsCreated: result.created.length,
         jobsUpdated: result.updated.length
       });
+      await markScrapeSuccess(task.scraper.name);
       sourceLog.info({ found: matchingJobs.length, created: result.created.length, updated: result.updated.length }, "Profile scrape finished");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       sourceLog.error({ err: error }, "Profile scrape failed");
+      await markScrapeFailure(task.scraper.name, message, config.SCRAPER_FAILURE_COOLDOWN_MS);
       await finishScrapeRun(run.id, {
         jobsFound: 0,
         jobsCreated: 0,

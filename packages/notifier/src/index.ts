@@ -35,7 +35,7 @@ export class TelegramNotifier implements Notifier {
       return;
     }
 
-    const text = formatJobs(jobs, this.timeZone);
+    const text = formatJobs(jobs, this.timeZone, "telegram");
 
     for (const chatId of this.chatIds) {
       const response = await fetch(`https://api.telegram.org/bot${this.token}/sendMessage`, {
@@ -44,7 +44,8 @@ export class TelegramNotifier implements Notifier {
         body: JSON.stringify({
           chat_id: chatId,
           text,
-          disable_web_page_preview: false
+          parse_mode: "HTML",
+          disable_web_page_preview: true
         })
       });
 
@@ -67,7 +68,7 @@ export class DiscordNotifier implements Notifier {
     const response = await fetch(this.webhookUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content: formatJobs(jobs, this.timeZone) })
+      body: JSON.stringify({ content: formatJobs(jobs, this.timeZone, "plain") })
     });
 
     if (!response.ok) {
@@ -99,21 +100,21 @@ export function createNotifier(config: AppConfig): Notifier {
   return new NoopNotifier();
 }
 
-function formatJobs(jobs: NotificationJob[], timeZone: string): string {
+function formatJobs(jobs: NotificationJob[], timeZone: string, format: "plain" | "telegram" = "plain"): string {
   const scrapeTime = formatScrapeTime(new Date(), timeZone);
-  const lines = jobs.slice(0, 10).map(formatJob);
+  const lines = jobs.slice(0, 10).map((job) => formatJob(job, format));
 
   const suffix = jobs.length > 10 ? `\n\nAnd ${jobs.length - 10} more new jobs.` : "";
   return `New matching jobs found\nScrape time: ${scrapeTime}\n\n${lines.join("\n\n---\n\n")}${suffix}`;
 }
 
-function formatJob(job: NotificationJob): string {
-  const title = compactLine(job.title) || "Untitled job";
-  const source = compactLine(job.source);
-  const company = optionalLine(job.company);
-  const location = optionalLine(job.location);
-  const salary = optionalLine(job.salary);
-  const techStack = formatTechStack(job.technologies);
+function formatJob(job: NotificationJob, format: "plain" | "telegram"): string {
+  const title = compactLine(job.title, format) || "Untitled job";
+  const source = compactLine(job.source, format);
+  const company = optionalLine(job.company, format);
+  const location = optionalLine(job.location, format);
+  const salary = optionalLine(job.salary, format);
+  const techStack = formatTechStack(job.technologies, format);
   const companyLocation = formatCompanyLocation(company, location);
 
   return [
@@ -121,7 +122,7 @@ function formatJob(job: NotificationJob): string {
     companyLocation,
     salary,
     techStack,
-    job.applyUrl
+    format === "telegram" ? formatApplyLink(job.applyUrl) : job.applyUrl
   ]
     .filter(Boolean)
     .join("\n");
@@ -144,19 +145,35 @@ function formatScrapeTime(date: Date, timeZone: string): string {
   }).format(date);
 }
 
-function formatTechStack(technologies: string[] | undefined): string {
+function formatTechStack(technologies: string[] | undefined, format: "plain" | "telegram"): string {
   if (!technologies || technologies.length === 0) return "";
 
-  return Array.from(new Set(technologies.map(optionalLine).filter(Boolean))).slice(0, 12).join(" ");
+  return Array.from(new Set(technologies.map((technology) => optionalLine(technology, format)).filter(Boolean))).slice(0, 12).join(" ");
 }
 
-function optionalLine(value: string | null | undefined): string {
-  const line = compactLine(value);
+function formatApplyLink(applyUrl: string): string {
+  return `<a href="${escapeHtmlAttribute(applyUrl)}">🔗 Apply Here</a>`;
+}
+
+function optionalLine(value: string | null | undefined, format: "plain" | "telegram"): string {
+  const line = compactLine(value, format);
   if (!line) return "";
   if (/^(unknown|n\/?a|none|null|salary not listed|tech stack not listed)$/i.test(line)) return "";
   return line;
 }
 
-function compactLine(value: string | null | undefined): string {
-  return value?.replace(/\s+/g, " ").trim() ?? "";
+function compactLine(value: string | null | undefined, format: "plain" | "telegram"): string {
+  const line = value?.replace(/\s+/g, " ").trim() ?? "";
+  return format === "telegram" ? escapeHtml(line) : line;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return escapeHtml(value).replaceAll('"', "&quot;");
 }

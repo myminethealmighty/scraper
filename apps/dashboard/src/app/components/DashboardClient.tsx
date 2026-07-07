@@ -2,13 +2,17 @@
 
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import {
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
   CalendarDays,
   ExternalLink,
   Filter,
   Heart,
   LogOut,
+  FileText,
   RotateCcw,
   Search,
+  X,
 } from "lucide-react";
 
 import type { JobQuery } from "@job-scraper/shared";
@@ -30,6 +34,9 @@ type DashboardJob = {
   source: string;
   status: string;
   favorite: boolean;
+  matchScore?: number | null;
+  matchedSkills?: string[];
+  matchedRoles?: string[];
 };
 
 type JobsResult = {
@@ -52,14 +59,25 @@ type DashboardStats = {
 
 type DashboardClientProps = {
   initialJobs: JobsResult;
+  initialResume: ResumeSummary | null;
   stats: DashboardStats;
   username?: string | null;
+};
+
+type ResumeSummary = {
+  skills: string[];
+  roles: string[];
+  locations: string[];
+  updatedAt: Date | string;
 };
 
 type QueryState = Pick<
   JobQuery,
   "q" | "source" | "workMode" | "status" | "favorite" | "page" | "pageSize"
->;
+> & {
+  resumeMatched?: boolean;
+  matchScoreSort?: "asc" | "desc";
+};
 
 const defaultQuery: QueryState = {
   q: undefined,
@@ -67,12 +85,18 @@ const defaultQuery: QueryState = {
   workMode: undefined,
   status: undefined,
   favorite: undefined,
+  resumeMatched: undefined,
+  matchScoreSort: "desc",
   page: 1,
   pageSize: 10,
 };
 
-export function DashboardClient({ initialJobs, stats, username }: DashboardClientProps) {
+export function DashboardClient({ initialJobs, initialResume, stats, username }: DashboardClientProps) {
   const [jobs, setJobs] = useState(initialJobs);
+  const [resume, setResume] = useState(initialResume);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeMessage, setResumeMessage] = useState("");
+  const [resumeOpen, setResumeOpen] = useState(false);
   const [query, setQuery] = useState<QueryState>({
     ...defaultQuery,
     page: initialJobs.page,
@@ -89,6 +113,8 @@ export function DashboardClient({ initialJobs, stats, username }: DashboardClien
           query.workMode ||
           query.status ||
           query.favorite !== undefined ||
+          query.resumeMatched ||
+          query.matchScoreSort !== "desc" ||
           query.page !== 1,
       ),
     [query],
@@ -113,6 +139,40 @@ export function DashboardClient({ initialJobs, stats, username }: DashboardClien
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     runSearch({ ...query, q: searchText, page: 1 });
+  }
+
+  async function handleResumeSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setResumeMessage("Extracting resume profile...");
+    const body = new FormData();
+    if (resumeFile) body.set("resume", resumeFile);
+
+    const response = await fetch("/api/resume", {
+      method: "POST",
+      body,
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setResumeMessage(payload.error ?? "Resume update failed.");
+      return;
+    }
+
+    setResume({
+      ...payload.parsed,
+      updatedAt: new Date().toISOString(),
+    });
+    setResumeFile(null);
+    setResumeMessage(
+      `Resume profile updated. Raw resume text was not stored. Matched jobs: ${payload.scoredJobs}.`,
+    );
+    setResumeOpen(false);
+    runSearch({ ...query, resumeMatched: true, matchScoreSort: "desc", page: 1 });
+  }
+
+  async function handleResumeFile(file: File | undefined) {
+    if (!file) return;
+    setResumeFile(file);
   }
 
   return (
@@ -161,16 +221,62 @@ export function DashboardClient({ initialJobs, stats, username }: DashboardClien
         />
       </section>
 
-      <form className="filters search-panel" onSubmit={handleSearch}>
+      <form className={`filters search-panel ${resume ? "has-score-sort" : ""}`} onSubmit={handleSearch}>
         <input
           className="input search-input"
           value={searchText}
           onChange={(event) => setSearchText(event.target.value)}
           placeholder="Search jobs, skills, companies"
         />
+        {resume ? (
+          <div className="score-sort-control" aria-label="Sort by match score">
+            <button
+              className={`score-sort-button ${query.matchScoreSort !== "asc" ? "active" : ""}`}
+              type="button"
+              title="Score high to low"
+              aria-pressed={query.matchScoreSort !== "asc"}
+              onClick={() =>
+                runSearch({
+                  ...query,
+                  resumeMatched: true,
+                  matchScoreSort: "desc",
+                  page: 1,
+                })
+              }
+            >
+              <ArrowDownWideNarrow size={15} />
+              High
+            </button>
+            <button
+              className={`score-sort-button ${query.matchScoreSort === "asc" ? "active" : ""}`}
+              type="button"
+              title="Score low to high"
+              aria-pressed={query.matchScoreSort === "asc"}
+              onClick={() =>
+                runSearch({
+                  ...query,
+                  resumeMatched: true,
+                  matchScoreSort: "asc",
+                  page: 1,
+                })
+              }
+            >
+              <ArrowUpWideNarrow size={15} />
+              Low
+            </button>
+          </div>
+        ) : null}
         <button className="button primary" type="submit" disabled={isPending}>
           <Search size={17} />
-          {isPending ? "Searching" : "Search"}
+          Search
+        </button>
+        <button
+          className="button resume-open-button"
+          type="button"
+          onClick={() => setResumeOpen(true)}
+        >
+          <FileText size={17} />
+          Resume Match
         </button>
         <button
           className="icon-button reset-button"
@@ -187,6 +293,21 @@ export function DashboardClient({ initialJobs, stats, username }: DashboardClien
 
       <div className="layout">
         <section className="job-list" aria-label="Jobs">
+          {query.resumeMatched ? (
+            <div className="match-context">
+              <div>
+                <strong>Resume matches</strong>
+                <span>Showing jobs filtered and sorted by your match profile.</span>
+              </div>
+              <button
+                className="button"
+                type="button"
+                onClick={() => runSearch({ ...query, resumeMatched: undefined, matchScoreSort: "desc", page: 1 })}
+              >
+                Show all jobs
+              </button>
+            </div>
+          ) : null}
           {jobs.items.length === 0 ? (
             <div className="empty">
               <Filter size={24} />
@@ -199,6 +320,9 @@ export function DashboardClient({ initialJobs, stats, username }: DashboardClien
                   <h2>
                     {cleanDisplayText(job.title)}{" "}
                     <span className="source-badge">{job.source}</span>
+                    {typeof job.matchScore === "number" ? (
+                      <span className="match-badge">{job.matchScore}% match</span>
+                    ) : null}
                   </h2>
                   <div className="job-lines">
                     {displayOptional(job.company) ? <div>{displayOptional(job.company)}</div> : null}
@@ -219,6 +343,11 @@ export function DashboardClient({ initialJobs, stats, username }: DashboardClien
                     </div>
                   </div>
                   <div className="badge-row">
+                    {job.matchedSkills?.slice(0, 5).map((skill) => (
+                      <span className="badge match-tech" key={"match-" + skill}>
+                        {skill}
+                      </span>
+                    ))}
                     {job.technologies.slice(0, 10).map((technology) => (
                       <button
                         className="badge badge-button"
@@ -356,6 +485,53 @@ export function DashboardClient({ initialJobs, stats, username }: DashboardClien
           ) : null}
         </aside>
       </div>
+
+      {resumeOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="resume-title">
+            <header className="modal-header">
+              <div>
+                <h2 id="resume-title">Resume Match</h2>
+                <div className="privacy-note">
+                  <p><strong>Stored:</strong> skills, roles, locations, keywords, and match scores.</p>
+                  <p><strong>Not stored:</strong> PDF files or raw resume text.</p>
+                  <p>Uploading a new resume replaces the current match profile.</p>
+                </div>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                title="Close"
+                onClick={() => setResumeOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            {resume ? (
+              <div className="resume-summary">
+                <span>{resume.skills.length} skills</span>
+                <span>{resume.roles.length} roles</span>
+                <span>{resume.locations.length} locations</span>
+              </div>
+            ) : null}
+
+            <form onSubmit={handleResumeSubmit}>
+              <input
+                className="input resume-file"
+                type="file"
+                accept=".pdf,application/pdf"
+                onChange={(event) => void handleResumeFile(event.currentTarget.files?.[0])}
+              />
+              {resumeFile ? <p className="resume-message">Selected: {resumeFile.name}</p> : null}
+              <button className="button primary resume-button" type="submit">
+                Update match profile
+              </button>
+            </form>
+            {resumeMessage ? <p className="resume-message">{resumeMessage}</p> : null}
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -401,6 +577,8 @@ function normalizeQuery(query: QueryState): QueryState {
     workMode: query.workMode || undefined,
     status: query.status || undefined,
     favorite: query.favorite,
+    resumeMatched: query.resumeMatched || undefined,
+    matchScoreSort: query.matchScoreSort === "asc" ? "asc" : "desc",
     page: query.page || 1,
     pageSize: query.pageSize || 10,
   };

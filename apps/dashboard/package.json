@@ -16,6 +16,7 @@
     "@prisma/client": "^6.1.0",
     "lucide-react": "^0.468.0",
     "next": "^16.2.10",
+    "pdf-parse": "^2.4.5",
     "postcss": "^8.5.16",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

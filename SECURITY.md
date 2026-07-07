@@ -42,6 +42,12 @@ If arbitrary URLs are added later, protect against SSRF by blocking localhost, p
 - Dashboard Telegram login must verify the Telegram login signature before creating a session.
 - Notification delivery should use saved profile recipients, not a global hardcoded chat ID.
 
+## Resume Privacy
+
+Resume matching is designed to avoid storing uploaded files or raw resume text. Dashboard PDF uploads are parsed in memory, then discarded after extraction. Telegram resume updates are parsed from the next message and the full text is not persisted. The database stores only extracted skills, roles, locations, keywords, and rule-based job scores.
+
+The dashboard only shows score-sorting controls after a resume profile exists. This keeps match-score actions tied to extracted structured resume data instead of exposing resume-related controls before the user has uploaded a resume.
+
 ## Database Safety
 
 Prisma migrations should run with `prisma migrate deploy` in production. Do not manually edit `_prisma_migrations` unless intentionally repairing a migration state.

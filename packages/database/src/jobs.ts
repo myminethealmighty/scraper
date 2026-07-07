@@ -98,6 +98,19 @@ export async function getJobStatsForTelegramUser(telegramId: string | null | und
   return getJobStatsWithWhere(where);
 }
 
+export async function deleteOldJobs(maxAgeDays: number) {
+  const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000);
+
+  return getPrisma().job.deleteMany({
+    where: {
+      OR: [
+        { postedAt: { lt: cutoff } },
+        { postedAt: null, firstSeenAt: { lt: cutoff } }
+      ]
+    }
+  });
+}
+
 async function listJobsWithWhere(query: JobQuery, where: Prisma.JobWhereInput) {
   const prisma = getPrisma();
   const skip = (query.page - 1) * query.pageSize;

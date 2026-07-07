@@ -70,6 +70,8 @@ type TelegramReplyMarkup = InlineKeyboardMarkup | ReplyKeyboardMarkup;
 const SOURCE_DONE = "sources:done";
 const SOURCE_ALL = "sources:all";
 const SOURCE_CLEAR = "sources:clear";
+const TERMS_UPDATE = "terms:update";
+const TERMS_KEEP = "terms:keep";
 
 export function startTelegramBot(config: AppConfig) {
   if (!config.TELEGRAM_BOT_TOKEN) {
@@ -87,6 +89,7 @@ export function startTelegramBot(config: AppConfig) {
 class TelegramBotPoller {
   private offset = 0;
   private stopped = false;
+  private readonly awaitingTerms = new Set<number>();
 
   constructor(private readonly token: string) {}
 
@@ -164,7 +167,8 @@ class TelegramBotPoller {
     }
 
     if (text === "🔎 Terms" || text === "/terms") {
-      await this.askForTerms(message.chat.id);
+      const profile = await this.upsertUserAndProfile(message.chat, message.from);
+      await this.askForTerms(message.chat.id, profile.id);
       return;
     }
 
@@ -177,11 +181,21 @@ class TelegramBotPoller {
       return;
     }
 
-    await this.saveTermsFromMessage(message, text);
+    if (this.awaitingTerms.has(message.chat.id)) {
+      await this.saveTermsFromMessage(message, text);
+      return;
+    }
+
+    await this.sendMessage(
+      message.chat.id,
+      "Choose Terms first, then send your search terms.",
+      this.buildReplyKeyboard("root"),
+    );
   }
 
   private async handleStart(message: TelegramMessage) {
     const profile = await this.upsertUserAndProfile(message.chat, message.from);
+    this.awaitingTerms.delete(message.chat.id);
 
     logger.info(
       { chatId: message.chat.id, profileId: profile.id },
@@ -249,15 +263,33 @@ class TelegramBotPoller {
       }
 
       await this.answerCallback(callback.id, "Sources saved");
+      await this.askForTerms(chat.id, profile.id);
+      return;
+    }
+
+    if (data === TERMS_UPDATE) {
+      this.awaitingTerms.add(chat.id);
+      await this.answerCallback(callback.id, "Send your search terms");
       await this.sendMessage(
         chat.id,
         [
-          "Step 2: send the roles, skills, or keywords you want to track.",
+          "Send roles, skills, or keywords separated by commas.",
           "",
           "Example:",
-          "React, NodeJs, Backend, Product Manager",
+          "Frontend, Backend, Laravel, Sales, Driver",
         ].join("\n"),
-        this.buildReplyKeyboard("back"),
+        this.buildReplyKeyboard("terms"),
+      );
+      return;
+    }
+
+    if (data === TERMS_KEEP) {
+      this.awaitingTerms.delete(chat.id);
+      await this.answerCallback(callback.id, "Current terms kept");
+      await this.sendMessage(
+        chat.id,
+        "Current search terms kept.",
+        this.buildReplyKeyboard("root"),
       );
       return;
     }
@@ -284,6 +316,7 @@ class TelegramBotPoller {
 
   private async handleHome(message: TelegramMessage) {
     await this.upsertUserAndProfile(message.chat, message.from);
+    this.awaitingTerms.delete(message.chat.id);
     await this.sendMessage(
       message.chat.id,
       "Choose an action from the menu below.",
@@ -293,6 +326,7 @@ class TelegramBotPoller {
 
   private async showSourcesForMessage(message: TelegramMessage) {
     const profile = await this.upsertUserAndProfile(message.chat, message.from);
+    this.awaitingTerms.delete(message.chat.id);
     await this.sendSourceKeyboard(
       message.chat.id,
       profile.id,
@@ -315,7 +349,7 @@ class TelegramBotPoller {
 
     const terms = parseTerms(text);
     if (terms.length === 0) {
-      await this.askForTerms(message.chat.id);
+      await this.askForTerms(message.chat.id, profile.id);
       return;
     }
 
@@ -335,18 +369,25 @@ class TelegramBotPoller {
       ].join("\n"),
       this.buildReplyKeyboard("root"),
     );
+    this.awaitingTerms.delete(message.chat.id);
   }
 
-  private async askForTerms(chatId: number) {
+  private async askForTerms(chatId: number, profileId: string) {
+    this.awaitingTerms.delete(chatId);
+    const existingTerms = await this.getProfileTerms(profileId);
+    const currentText = existingTerms.length > 0
+      ? ["", "Current terms:", existingTerms.join(", ")]
+      : [];
+
     await this.sendMessage(
       chatId,
       [
-        "Send roles, skills, or keywords separated by commas.",
+        "Search terms",
+        ...currentText,
         "",
-        "Example:",
-        "Frontend, Backend, Laravel, Sales, Driver",
+        "Choose whether to update them or leave them unchanged.",
       ].join("\n"),
-      this.buildReplyKeyboard("back"),
+      this.buildTermsKeyboard(),
     );
   }
 
@@ -398,6 +439,16 @@ class TelegramBotPoller {
     return new Set(sources.map((source) => source.sourceKey));
   }
 
+  private async getProfileTerms(profileId: string): Promise<string[]> {
+    const terms = await getPrisma().searchTerm.findMany({
+      where: { profileId },
+      orderBy: [{ type: "asc" }, { value: "asc" }],
+      select: { value: true },
+    });
+
+    return terms.map((term) => term.value);
+  }
+
   private async sendSourceKeyboard(
     chatId: number,
     profileId: string,
@@ -446,7 +497,7 @@ class TelegramBotPoller {
     return { inline_keyboard: rows };
   }
 
-  private buildReplyKeyboard(mode: "root" | "back"): ReplyKeyboardMarkup {
+  private buildReplyKeyboard(mode: "root" | "back" | "terms"): ReplyKeyboardMarkup {
     const keyboard = mode === "back"
       ? [[{ text: "🌐 Sources" }, { text: "🔎 Terms" }], [{ text: "⬅️ Back" }, { text: "🏠 Home" }]]
       : [[{ text: "🌐 Sources" }, { text: "🔎 Terms" }]];
@@ -456,7 +507,18 @@ class TelegramBotPoller {
       resize_keyboard: true,
       one_time_keyboard: false,
       is_persistent: true,
-      input_field_placeholder: "Choose an option or type search terms"
+      input_field_placeholder: mode === "terms" ? "Type search terms" : "Choose an option"
+    };
+  }
+
+  private buildTermsKeyboard(): InlineKeyboardMarkup {
+    return {
+      inline_keyboard: [
+        [
+          { text: "Update", callback_data: TERMS_UPDATE },
+          { text: "Leave current", callback_data: TERMS_KEEP },
+        ],
+      ],
     };
   }
 

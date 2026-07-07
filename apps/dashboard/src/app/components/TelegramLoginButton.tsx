@@ -19,5 +19,5 @@ export function TelegramLoginButton({ botUsername }: { botUsername: string }) {
     ref.current.appendChild(script);
   }, [botUsername]);
 
-  return <div ref={ref} />;
+  return <div className="telegram-login-frame" ref={ref} />;
 }

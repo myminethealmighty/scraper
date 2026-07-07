@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 
-import { getDashboardSession, getTelegramBotUsername, isDashboardAuthEnabled } from "../auth";
+import {
+  getDashboardSession,
+  getTelegramBotUsername,
+  isDashboardAuthEnabled,
+} from "../auth";
 import { TelegramLoginButton } from "../components/TelegramLoginButton";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +20,13 @@ export default async function LoginPage() {
   return (
     <main className="login-shell">
       <section className="login-panel">
-        <h1>Job Scraper</h1>
-        <p>Sign in with Telegram to open the dashboard.</p>
+        <h1>Sign in</h1>
         {botUsername ? (
           <TelegramLoginButton botUsername={botUsername} />
         ) : (
-          <p className="error-text">Set NEXT_PUBLIC_TELEGRAM_BOT_USERNAME in the environment.</p>
+          <p className="error-text">
+            Set NEXT_PUBLIC_TELEGRAM_BOT_USERNAME in the environment.
+          </p>
         )}
       </section>
     </main>

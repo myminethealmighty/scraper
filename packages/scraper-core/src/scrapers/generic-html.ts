@@ -9,6 +9,8 @@ type HtmlBoardConfig = {
   searchUrl: (keyword: string) => string;
   linkIncludes: string[];
   defaultLocation: string;
+  enrichDetails?: boolean;
+  detailSearchLimit?: number;
 };
 
 export class GenericHtmlJobBoardScraper implements Scraper {
@@ -31,10 +33,11 @@ export class GenericHtmlJobBoardScraper implements Scraper {
     return this.parse(response.data, context.keyword);
   }
 
-  private parse(html: string, keyword: string): RawJob[] {
+  private async parse(html: string, keyword: string): Promise<RawJob[]> {
     const $ = cheerio.load(html);
     const seen = new Set<string>();
     const jobs: RawJob[] = [];
+    const candidates: Array<{ title: string; description: string; applyUrl: string }> = [];
 
     $("a[href]").each((_, element) => {
       const anchor = $(element);
@@ -49,11 +52,18 @@ export class GenericHtmlJobBoardScraper implements Scraper {
       const description = cleanJobDescription(container.text() || anchor.parent().text() || title);
       if (!isRelevant(title, description, keyword)) return;
 
-      const company = inferField(description, title) || "Unknown";
-
       seen.add(applyUrl);
+      candidates.push({ title, description, applyUrl });
+    });
+
+    for (const [index, candidate] of candidates.entries()) {
+      const description = this.config.enrichDetails && index < (this.config.detailSearchLimit ?? candidates.length)
+        ? await this.fetchDetailDescription(candidate.applyUrl, candidate.description)
+        : candidate.description;
+      const company = inferField(description, candidate.title) || "Unknown";
+
       jobs.push({
-        title,
+        title: candidate.title,
         company,
         location: inferLocation(description) || this.config.defaultLocation,
         salary: inferSalary(description),
@@ -61,14 +71,34 @@ export class GenericHtmlJobBoardScraper implements Scraper {
         workMode: inferWorkMode(description),
         postedAt: inferPostedAt(description),
         description,
-        technologies: extractTechnologies(`${title} ${description}`),
-        applyUrl,
+        technologies: extractTechnologies(`${candidate.title} ${description}`),
+        applyUrl: candidate.applyUrl,
         source: this.name,
-        sourceJobId: applyUrl.split("/").filter(Boolean).at(-1) ?? null
+        sourceJobId: candidate.applyUrl.split("/").filter(Boolean).at(-1) ?? null
       });
-    });
 
-    return jobs.slice(0, 25);
+      if (jobs.length >= 25) break;
+    }
+
+    return jobs;
+  }
+
+  private async fetchDetailDescription(applyUrl: string, fallback: string): Promise<string> {
+    try {
+      const response = await axios.get<string>(applyUrl, {
+        timeout: 25_000,
+        headers: {
+          accept: "text/html,application/xhtml+xml",
+          "user-agent": "Mozilla/5.0 (compatible; job-scraper/0.1)"
+        }
+      });
+      const $ = cheerio.load(response.data);
+      $("script,style,noscript,template,svg").remove();
+      const text = cleanJobDescription($("body").text());
+      return text || fallback;
+    } catch {
+      return fallback;
+    }
   }
 }
 
@@ -78,7 +108,9 @@ export function createJobNetScraper(): Scraper {
     baseUrl: "https://www.jobnet.com.mm",
     searchUrl: (keyword) => `https://www.jobnet.com.mm/jobs?kw=${encodeURIComponent(keyword)}`,
     linkIncludes: ["/job/"],
-    defaultLocation: "Myanmar"
+    defaultLocation: "Myanmar",
+    enrichDetails: true,
+    detailSearchLimit: 12
   });
 }
 
@@ -101,6 +133,9 @@ function cleanJobDescription(value: string): string {
     value
       .replace(/\b\S*_with_bool_\S*\b/g, " ")
       .replace(/^\(\(env,\s*targets\).*$/s, " ")
+      .replace(/^By continuing to use our platform, you:.*?Skip to content\s*/is, " ")
+      .replace(/^Skip to main content LinkedIn.*?Join now\s*/is, " ")
+      .replace(/^LinkedIn Jobs Clear text Clear text Sign in Join now\s*/is, " ")
   );
 }
 function isRelevant(title: string, description: string, keyword: string): boolean {

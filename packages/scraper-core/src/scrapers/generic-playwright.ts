@@ -217,6 +217,9 @@ function cleanJobDescription(value: string): string {
     value
       .replace(/\b\S*_with_bool_\S*\b/g, " ")
       .replace(/^\(\(env,\s*targets\).*$/s, " ")
+      .replace(/^By continuing to use our platform, you:.*?Skip to content\s*/is, " ")
+      .replace(/^Skip to main content LinkedIn.*?Join now\s*/is, " ")
+      .replace(/^LinkedIn Jobs Clear text Clear text Sign in Join now\s*/is, " ")
   );
 }
 function inferCompany(description: string, title: string): string {

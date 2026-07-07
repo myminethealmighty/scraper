@@ -34,6 +34,10 @@ export function isDashboardAuthEnabled(): boolean {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN);
 }
 
+export function getDashboardTelegramId(session: TelegramDashboardSession | null): string | undefined {
+  return session?.id;
+}
+
 export async function getDashboardSession(): Promise<TelegramDashboardSession | null> {
   if (!isDashboardAuthEnabled()) return null;
 

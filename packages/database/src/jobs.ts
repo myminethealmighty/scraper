@@ -104,7 +104,7 @@ async function listJobsWithWhere(query: JobQuery, where: Prisma.JobWhereInput) {
   const [items, total] = await prisma.$transaction([
     prisma.job.findMany({
       where,
-      orderBy: [{ firstSeenAt: "desc" }, { postedAt: "desc" }],
+      orderBy: [{ postedAt: "desc" }, { firstSeenAt: "desc" }],
       skip,
       take: query.pageSize
     }),
